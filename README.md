@@ -19,36 +19,36 @@ flowchart TD
     classDef loopNode fill:#f8d7da,stroke:#dc3545,stroke-width:2px,color:#721c24;
 
     %% Nodes
-    Start([START]):::startEnd
-    End([END]):::startEnd
+    Start(["Start<br>(Initiate the user workflow)"]):::startEnd
+    End(["End<br>(Terminate the workflow loop)"]):::startEnd
 
-    DeciderNode[retrieval_decider_node<br>Analyze query & determine route]:::process
-    DeciderCond{Retrieval Decider Route?}:::decision
+    DeciderNode["Retrieval Decider<br>(Analyze query and determine route)"]:::process
+    DeciderCond{"Decider Route<br>(Choose query processing path)"}:::decision
 
-    DirectNode[direct_generation_node<br>Generate answer directly from LLM]:::process
+    DirectNode["Direct Generation<br>(Generate answer directly from LLM)"]:::process
 
-    GenRetrieverQueryNode[generate_retriever_query_node<br>Optimize query for vector search]:::process
-    RetrieveNode[retrieve_node<br>Query FAISS vector store]:::process
+    GenRetrieverQueryNode["Generate Retriever Query<br>(Optimize query for vector search)"]:::process
+    RetrieveNode["Retrieve Documents<br>(Query FAISS vector store)"]:::process
 
-    Fanout[fanout_relevant_node<br>Parallel Map: Split contexts]:::process
-    IsRelevantNode[is_relevant_node<br>Check context relevance to query]:::process
-    AggregateNode[aggregate_relevance<br>Reduce: Consolidate relevance results]:::process
-    IsRelevantCond{Are any retrieved<br>contexts relevant?}:::decision
+    Fanout["Fanout Contexts<br>(Split contexts for parallel evaluation)"]:::process
+    IsRelevantNode["Is Relevant<br>(Check context relevance to query)"]:::process
+    AggregateNode["Aggregate Relevance<br>(Consolidate parallel relevance results)"]:::process
+    IsRelevantCond{"Relevance Check<br>(Are any retrieved contexts relevant?)"}:::decision
 
-    GenWebSearchQueryNode[generate_web_search_query_node<br>Optimize query for web search]:::process
-    WebSearchNode[web_search_node<br>Search web via Tavily API]:::process
+    GenWebSearchQueryNode["Generate Web Search Query<br>(Optimize query for web search)"]:::process
+    WebSearchNode["Web Search<br>(Search web via Tavily API)"]:::process
 
-    AnswerFromContextNode[answer_from_context_node<br>Synthesize answer using context]:::process
+    AnswerFromContextNode["Answer From Context<br>(Synthesize answer using retrieved context)"]:::process
 
-    CheckAnswerGroundedNode[check_answer_grounded_node<br>Verify answer is grounded in context]:::process
-    IsGroundedCond{Is Answer Grounded &<br>Has Revise Retries?}:::decision
+    CheckAnswerGroundedNode["Check Answer Grounded<br>(Verify answer grounding in context)"]:::process
+    IsGroundedCond{"Grounding Check<br>(Is answer grounded with retries?)"}:::decision
 
-    ReviseAnswerNode[revise_answer_node<br>Refine answer using critic model]:::process
+    ReviseAnswerNode["Revise Answer<br>(Refine answer using critic model)"]:::process
 
-    IsAnswerUsefulNode[is_answer_useful_node<br>Judge if answer solves the query]:::process
-    IsUsefulCond{Is Answer Useful &<br>Has Rewrite Retries?}:::decision
+    IsAnswerUsefulNode["Is Answer Useful<br>(Judge if answer solves query)"]:::process
+    IsUsefulCond{"Utility Check<br>(Is answer useful with retries?)"}:::decision
 
-    RewriteQueryNode[rewrite_query_node<br>Reframe user query & decrement retry count]:::loopNode
+    RewriteQueryNode["Rewrite Query<br>(Reframe query and decrement retries)"]:::loopNode
 
     %% Connections
     Start --> DeciderNode

@@ -5,7 +5,6 @@ data
 *.db
 *.db-shm
 *.db-wal
-/notebooks/ragas.ipynb
 .ipynb_checkpoints
 __pycache__
 src/workflow_backup.py
