@@ -42,9 +42,9 @@ if __name__ == "__main__":
         
         initial_state = {
             "user_query": human,
-            "k": 3,
-            "max_retry_for_revise_answer": 3,
-            "max_retry_for_rewrite_query": 2,
+            "k": 2,
+            "max_retry_for_revise_answer": 2,
+            "max_retry_for_rewrite_query": 1,
         }
 
         with Progress(

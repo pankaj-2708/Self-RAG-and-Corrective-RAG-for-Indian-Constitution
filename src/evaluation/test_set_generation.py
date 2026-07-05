@@ -3,20 +3,18 @@ import warnings
 from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import ChatOllama
+from langchain_aws import ChatBedrockConverse
 from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.testset.graph import KnowledgeGraph
 from ragas.testset import TestsetGenerator
 from ragas.testset.synthesizers import default_query_distribution
+from ragas.llms import LangchainLLMWrapper
 
 warnings.filterwarnings("ignore")
 os.environ['LANGSMITH_TRACING_V2'] = "true"
 
 load_dotenv()
 
-if not os.environ.get('OLLAMA_API_KEY'):
-    raise ValueError("No ollama api key")
-else:
-    OLLAMA_API_KEY = os.environ['OLLAMA_API_KEY']
 
 # Resolve paths relative to the file location to make it run from anywhere
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -27,12 +25,14 @@ test_set_path = os.path.join(DATA_DIR, "test_set.csv")
 generator_embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
 generator_embeddings = LangchainEmbeddingsWrapper(generator_embeddings)
 
-generator_llm = ChatOllama(
-    model="nemotron-3-ultra:cloud",
-    base_url="https://ollama.com",
+generator_llm = ChatBedrockConverse(
+    model="deepseek.v3.2",
+    api_key=os.environ['AWS_BEARER_TOKEN_BEDROCK'],
+    region_name="us-east-1",
     temperature=0,
-    client_kwargs={"headers": {"Authorization": f"Bearer {OLLAMA_API_KEY}"}},
-)
+  )
+
+generator_llm = LangchainLLMWrapper(generator_llm)
 
 kg = KnowledgeGraph().load(kg_path)
 

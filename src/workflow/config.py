@@ -1,55 +1,55 @@
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_ollama import ChatOllama
+from langchain_aws import ChatBedrockConverse
 from langchain_tavily import TavilySearch
 from dotenv import load_dotenv
 import os
 
 load_dotenv()
 
-if not os.environ.get('OLLAMA_API_KEY'):
-    raise ValueError("No ollama api key")
+if not os.environ.get('AWS_BEARER_TOKEN_BEDROCK'):
+    raise ValueError("No AWS bearer token for Bedrock")
 else:
-    OLLAMA_API_KEY = os.environ['OLLAMA_API_KEY']
+    AWS_BEARER_TOKEN_BEDROCK = os.environ['AWS_BEARER_TOKEN_BEDROCK']
 
 # Models
 model_name = "sentence-transformers/all-mpnet-base-v2"
 embeddings = HuggingFaceEmbeddings(model_name=model_name)
 
-# Shared connection kwargs
-_ollama_kwargs = dict(
-    model="nemotron-3-ultra:cloud",
-    base_url="https://ollama.com",
-    client_kwargs={"headers": {"Authorization": f"Bearer {OLLAMA_API_KEY}"}},
+# Shared Bedrock kwargs
+_bedrock_kwargs = dict(
+    model="deepseek.v3.2",
+    api_key=AWS_BEARER_TOKEN_BEDROCK,
+    region_name="us-east-1",
 )
 
 # --- Task-specific models (previously all main_model) ---
 
 # For binary decisions: retrieval_decider, is_relevant
 # Low temp → deterministic, consistent classification
-decision_model = ChatOllama(**_ollama_kwargs, temperature=0.0)
+decision_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.0)
 
 # For generating retriever & web-search queries
 # Moderate temp → some variety in query formulation
-query_gen_model = ChatOllama(**_ollama_kwargs, temperature=0.4)
+query_gen_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.4)
 
 # For open-ended answer generation: direct_generation, answer_from_context
 # Higher temp → natural, fluent responses
-generation_model = ChatOllama(**_ollama_kwargs, temperature=0.7)
+generation_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.7)
 
 # For groundedness verification: check_answer_grounded
 # Zero temp → strict, factual evaluation
-grounding_model = ChatOllama(**_ollama_kwargs, temperature=0.0)
+grounding_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.0)
 
 
 # Rewrites queries to improve retrieval quality
-query_rewrite_model = ChatOllama(**_ollama_kwargs, temperature=0.3)
+query_rewrite_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.3)
 
 # Judges whether an answer is useful to the user
-judge_model = ChatOllama(**_ollama_kwargs, temperature=0.0)
+judge_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.0)
 
 # Revises/improves an answer that failed grounding
-critic_model = ChatOllama(**_ollama_kwargs, temperature=0.5)
+critic_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.5)
 
 # vector_store
 vector_store = FAISS.load_local(
