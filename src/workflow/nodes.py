@@ -3,7 +3,7 @@ from workflow.state import schema
 from workflow.config import (
     decision_model, query_gen_model, generation_model, grounding_model,
     critic_model, judge_model, query_rewrite_model,
-    retriever, tavily_tool
+    retriever, tavily_tool, vector_store
 )
 from workflow.schemas import (
     parser_for_retrieval_decider_node,
@@ -46,19 +46,46 @@ def generate_retriever_query_node(state: schema):
     ]
     res = parser_for_retriever_query_node.invoke(
         query_gen_model.invoke(inp).content
-    ).retriever_queries
-    return {"retriever_queries": res}
+    )
+    # Explicit check to enforce at most 3 queries
+    queries = res.retriever_queries[:3]
+    
+    queries_dicts = [
+        {
+            "query": item.query,
+            "doc_type": item.doc_type,
+            "number": item.number
+        }
+        for item in queries
+    ]
+    return {"retriever_queries": queries_dicts}
 
 def retrieve_node(state: schema):
-    global retriever
-    queries = state.get("retriever_queries") or [state["user_query"]]
+    global vector_store
+    queries = state.get("retriever_queries")
     if not queries:
-        queries = [state["user_query"]]
-    
+        queries = [{"query": state["user_query"], "doc_type": "None", "number": None}]
+        
     all_contexts = []
     seen = set()
-    for query in queries:
-        retrieved_contexts = retriever.invoke(query, k=state["k"])
+    k_val = state.get("k") or 3
+    
+    for q_item in queries:
+        query_str = q_item.get("query")
+        doc_type = q_item.get("doc_type")
+        number = q_item.get("number")
+        
+        filter_dict = None
+        if doc_type == "Constitution" and number:
+            filter_dict = {"Article": str(number).strip()}
+        elif doc_type == "IPC" and number:
+            filter_dict = {"Section": str(number).strip()}
+            
+        if filter_dict:
+            retrieved_contexts = vector_store.similarity_search(query_str, k=k_val, filter=filter_dict)
+        else:
+            retrieved_contexts = vector_store.similarity_search(query_str, k=k_val)
+            
         for doc in retrieved_contexts:
             if doc.page_content not in seen:
                 seen.add(doc.page_content)

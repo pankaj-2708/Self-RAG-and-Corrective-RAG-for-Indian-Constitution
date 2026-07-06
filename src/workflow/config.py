@@ -1,4 +1,4 @@
-from langchain_community.vectorstores import FAISS
+from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_aws import ChatBedrockConverse
 from langchain_tavily import TavilySearch
@@ -52,10 +52,10 @@ judge_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.0)
 critic_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.5)
 
 # vector_store
-vector_store = FAISS.load_local(
-    "C:\\Users\\panka\\genai_project\\constitution_rag\\data\\constitution_and_ipc.faiss",
-    embeddings=embeddings,
-    allow_dangerous_deserialization=True,
+vector_store = Chroma(
+    collection_name="constitution_and_ipc",
+    persist_directory="C:\\Users\\panka\\genai_project\\constitution_rag\\data\\constitution_and_ipc.chroma",
+    embedding_function=embeddings,
 )
 retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 3})
 

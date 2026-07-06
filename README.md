@@ -28,7 +28,7 @@ flowchart TD
     DirectNode["Direct Generation<br>(Generate answer directly from LLM)"]:::process
 
     GenRetrieverQueryNode["Generate Retriever Query<br>(Optimize query for vector search)"]:::process
-    RetrieveNode["Retrieve Documents<br>(Query FAISS vector store)"]:::process
+    RetrieveNode["Retrieve Documents<br>(Query Chroma vector store)"]:::process
 
     Fanout["Fanout Contexts<br>(Split contexts for parallel evaluation)"]:::process
     IsRelevantNode["Is Relevant<br>(Check context relevance to query)"]:::process
@@ -90,7 +90,7 @@ flowchart TD
 ## 🚀 Key Features
 
 1. **Intelligent Query Routing (`retrieval_decider_node`)**: Evaluates if the query is a general knowledge question (`None`), requires constitutional/IPC lookup (`retrieval`), or concerns recent happenings/un-indexed details (`web_search`).
-2. **Multi-Query Retrieval (`generate_retriever_query_node` & `retrieve_node`)**: Generates optimized search queries to ensure comprehensive fetching from the FAISS database.
+2. **Multi-Query Retrieval (`generate_retriever_query_node` & `retrieve_node`)**: Generates optimized search queries to ensure comprehensive fetching from the Chroma database.
 3. **Parallel Relevance Verification (`fanout_relevant_node` & `is_relevant_node`)**: Distributes retrieved documents in parallel (Map step) to score and filter irrelevant content, and combines them (Reduce step) to clean up noise.
 4. **Web Search Fallback (`web_search_node`)**: Integrates the Tavily Search API as a backup when local retrieval fails to find relevant context.
 5. **Hallucination & Grounding Check (`check_answer_grounded_node`)**: Grades the synthesized answer against the retrieved evidence. If the answer is ungrounded, it invokes `revise_answer_node` to regenerate using a critic model.
@@ -109,9 +109,9 @@ flowchart TD
     *   `config.py`: Loads credentials and defines model components (using Ollama and HuggingFace).
     *   `prompts.py`: Holds system instructions for evaluation, generation, revision, and rewriting.
     *   `schemas.py`: Implements Pydantic parser schemas for structured JSON output.
-*   **`src/create_vector_store.py`**: Ingestion script that parses raw article and section files and saves them as a FAISS database.
+*   **`src/create_vector_store.py`**: Ingestion script that parses raw article and section files and saves them as a Chroma database.
 *   **`src/cli.py`**: Interactive terminal shell utilizing `rich` for pretty printing and real-time step streaming.
-*   **`data/`**: Directory containing raw JSON datasets and FAISS database files.
+*   **`data/`**: Directory containing raw JSON datasets and Chroma database files.
 
 ---
 
@@ -143,11 +143,11 @@ OLLAMA_API_KEY="your-ollama-api-key"
 ```
 
 ### 4. Create the Vector Store
-To ingest the Indian Constitution and Penal Code data into the local FAISS index:
+To ingest the Indian Constitution and Penal Code data into the local Chroma vector store:
 ```bash
 python src/create_vector_store.py
 ```
-*(This parses raw inputs from `data/articles.json` and `data/penal_code_sections.json` and compiles them under `data/constitution_and_ipc.faiss`).*
+*(This parses raw inputs from `data/articles.json` and `data/penal_code_sections.json` and compiles them under `data/constitution_and_ipc.chroma`).*
 
 ---
 

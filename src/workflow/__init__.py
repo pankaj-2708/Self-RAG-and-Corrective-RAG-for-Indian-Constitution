@@ -1,3 +1,4 @@
+
 import sqlite3
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -12,6 +13,12 @@ from workflow.nodes import (
 from workflow.edges import (
     retrieval_decider_condition, is_relevant_condition,
     is_grounded_condition, is_answer_useful_condition
+)
+
+from phoenix.otel import register
+tracer_provider = register(
+  project_name="constitution",
+  auto_instrument=True 
 )
 
 conn = sqlite3.connect("statedb.db", check_same_thread=False)

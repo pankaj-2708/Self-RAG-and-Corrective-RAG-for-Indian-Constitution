@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Literal, List
+from typing import Literal, List, Optional
 from langchain_core.output_parsers import PydanticOutputParser
 
 class schema_for_retrieval_decider_node(BaseModel):
@@ -56,8 +56,22 @@ parser_for_rewrite_query_node = PydanticOutputParser(
     pydantic_object=schema_for_rewrite_query_node
 )
 
+class RetrieverQueryItem(BaseModel):
+    query: str = Field(..., description="Optimized search query string.")
+    doc_type: Literal["IPC", "Constitution", "None"] = Field(
+        ...,
+        description="Whether a specific section/article is explicitly requested for this query (IPC or Constitution). Otherwise 'None'."
+    )
+    number: Optional[str] = Field(
+        None,
+        description="The specific article or section number if explicitly requested (e.g. '21' or '302'). Otherwise null or empty."
+    )
+
 class schema_for_retriever_query_node(BaseModel):
-    retriever_queries: List[str] = Field(..., description="Optimized search queries for the internal vector database retrieval. Generate at most 3 queries.")
+    retriever_queries: List[RetrieverQueryItem] = Field(
+        ...,
+        description="Optimized search queries for database retrieval. Generate only the required number of queries needed to answer the user query. Generate at most 3 queries."
+    )
 
 parser_for_retriever_query_node = PydanticOutputParser(
     pydantic_object=schema_for_retriever_query_node

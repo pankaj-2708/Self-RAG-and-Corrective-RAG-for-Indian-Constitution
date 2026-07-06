@@ -7,7 +7,7 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.model_selection import train_test_split
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
+from langchain_chroma import Chroma
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -20,22 +20,19 @@ else:
 # Resolve paths relative to the file location to make it run from anywhere
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../data"))
-vector_store_path = os.path.join(DATA_DIR, "constitution_and_ipc.faiss")
+vector_store_path = os.path.join(DATA_DIR, "constitution_and_ipc.chroma")
 
 generator_embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
-vector_store = FAISS.load_local(vector_store_path, embeddings=generator_embeddings, allow_dangerous_deserialization=True)
-all_docs = vector_store.docstore._dict
-faiss_index = vector_store.index
+vector_store = Chroma(
+    collection_name="constitution_and_ipc",
+    persist_directory=vector_store_path,
+    embedding_function=generator_embeddings
+)
 
-t_documents = []
-t_metadata = []
-t_embedding = []
-for idx, doc_id in vector_store.index_to_docstore_id.items():
-    doc = vector_store.docstore._dict[doc_id]
-    embedding = faiss_index.reconstruct(idx)
-    t_documents.append(doc.page_content)
-    t_metadata.append(doc.metadata)
-    t_embedding.append(embedding)
+data = vector_store.get(include=["documents", "metadatas", "embeddings"])
+t_documents = data["documents"]
+t_metadata = data["metadatas"]
+t_embedding = data["embeddings"]
 
 df = pd.DataFrame({"document": t_documents, "metadata": t_metadata, "embedding": t_embedding})
 

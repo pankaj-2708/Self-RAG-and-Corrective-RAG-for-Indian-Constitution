@@ -8,7 +8,7 @@ class schema(TypedDict):
     retrieval_required: Literal["retrieval", "web_search", "None"]
     web_searched: bool
     user_query: str
-    retriever_queries: Optional[List[str]]
+    retriever_queries: Optional[List[dict]]
     web_search_queries: Optional[List[str]]
     retrieved_contexts: List[str]
     relevant_contexts: Annotated[List[str],add_messages]
