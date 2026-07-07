@@ -55,28 +55,44 @@ app = graph.compile()
 # Load evaluation data via pandas
 df = pd.read_csv(test_set_path)
 
-def run_langgraph_rag(user_query, app):
-    try:
-        res = app.invoke({
+def run_langgraph_rag(user_query, app, pbar=None):
+    def _run():
+        state_updates = {
+            "relevant_contexts": [],
+            "generated_response": ""
+        }
+        for chunk in app.stream({
             "user_query": user_query,
             "k": 2,
             "max_retry_for_revise_answer": 2,
             "max_retry_for_rewrite_query": 1
-        })
+        }, stream_mode="updates"):
+            for node_name, node_state in chunk.items():
+                if pbar is not None:
+                    pbar.set_postfix(node=node_name)
+                
+                if node_state and "generated_response" in node_state:
+                    state_updates["generated_response"] = node_state["generated_response"]
+                
+                if node_state and "relevant_contexts" in node_state:
+                    rc = node_state["relevant_contexts"]
+                    if isinstance(rc, list):
+                        state_updates["relevant_contexts"].extend(rc)
+                    else:
+                        state_updates["relevant_contexts"].append(rc)
+        return state_updates
+
+    try:
+        res = _run()
     except (ValidationError, OutputParserException) as e:
         print(f"\n[Warning] Encountered validation/parsing error: {e}. Retrying once...")
-        res = app.invoke({
-            "user_query": user_query,
-            "k": 2,
-            "max_retry_for_revise_answer": 2,
-            "max_retry_for_rewrite_query": 1
-        })
+        res = _run()
     
     # Extract text content of context messages (due to add_messages annotation in the state schema)
     contexts_raw = res.get('relevant_contexts', [])
     contexts = [c.content if hasattr(c, 'content') else str(c) for c in contexts_raw]
     
-    return res['generated_response'], contexts
+    return res.get('generated_response', ''), contexts
 
 # Check for existing progress file
 evaluation_data = []
@@ -105,8 +121,6 @@ if os.path.exists(progress_path):
                 "answer": row["answer"],
                 "contexts": contexts_list,
                 "ground_truth": row["ground_truth"],
-                "persona": row.get("persona", ""),
-                "query_style": row.get("query_style", ""),
                 "synthesizer": row.get("synthesizer", "")
             })
             completed_questions.add(row["question"])
@@ -122,20 +136,19 @@ if os.path.exists(progress_path):
 df_to_run = df[~df["user_input"].isin(completed_questions)]
 
 print("Running LangGraph workflow across test set...")
-for _, row in tqdm(df_to_run.iterrows(), total=len(df), initial=len(completed_questions), desc="Evaluating queries"):
+pbar = tqdm(df_to_run.iterrows(), total=len(df), initial=len(completed_questions), desc="Evaluating queries")
+for _, row in pbar:
     question = row["user_input"]
     ground_truth = row["reference"] 
     
     tqdm.write(f"Processing query: {question}")
-    answer, contexts = run_langgraph_rag(question, app)
+    answer, contexts = run_langgraph_rag(question, app, pbar)
     
     evaluation_data.append({
         "question": question,
         "answer": answer,         
         "contexts": contexts,     
         "ground_truth": ground_truth,
-        "persona": row["persona_name"],
-        "query_style": row["query_style"],
         "synthesizer": row["synthesizer_name"]
     })
     completed_questions.add(question)

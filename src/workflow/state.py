@@ -1,4 +1,5 @@
-from typing import TypedDict, List, Literal, Optional,Annotated
+from typing import TypedDict, List, Literal, Optional, Annotated
+import operator
 from pydantic import Field
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
@@ -10,8 +11,8 @@ class schema(TypedDict):
     user_query: str
     retriever_queries: Optional[List[dict]]
     web_search_queries: Optional[List[str]]
-    retrieved_contexts: List[str]
-    relevant_contexts: Annotated[List[str],add_messages]
+    retrieved_contexts: Annotated[List[str], operator.add]
+    relevant_contexts: Annotated[List[str], add_messages]
     answer_for_query: str
     generated_response: str
     is_grounded: bool
@@ -20,5 +21,5 @@ class schema(TypedDict):
     evidence: str
     k: Optional[int] = Field(default=3)
     max_retry_for_revise_answer: Optional[int] = Field(default=3)
-    max_retry_for_rewrite_query: Optional[int] = Field(default=2)
+    max_retry_for_answer_relevancy: Optional[int] = Field(default=2)
     messages: List[BaseMessage]

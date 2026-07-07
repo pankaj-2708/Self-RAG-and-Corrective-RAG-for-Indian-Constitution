@@ -49,11 +49,11 @@ parser_for_is_answer_useful_node = PydanticOutputParser(
     pydantic_object=schema_for_is_answer_useful_node
 )
 
-class schema_for_rewrite_query_node(BaseModel):
-    updated_query: str
+class schema_for_rewrite_answer_node(BaseModel):
+    rewritten_response: str = Field(..., description="Rewritten response that better addresses the user's query while remaining grounded in the provided contexts")
 
-parser_for_rewrite_query_node = PydanticOutputParser(
-    pydantic_object=schema_for_rewrite_query_node
+parser_for_rewrite_answer_node = PydanticOutputParser(
+    pydantic_object=schema_for_rewrite_answer_node
 )
 
 class RetrieverQueryItem(BaseModel):

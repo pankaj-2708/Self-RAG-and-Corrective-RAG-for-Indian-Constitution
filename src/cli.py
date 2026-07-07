@@ -1,6 +1,7 @@
 import os
 import warnings
 import logging
+import time
 
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
@@ -47,6 +48,7 @@ if __name__ == "__main__":
             "max_retry_for_rewrite_query": 1,
         }
 
+        start_time = time.time()
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -62,6 +64,14 @@ if __name__ == "__main__":
                 progress.update(task, description=f"[cyan]Completed {node_name}...")
 
         response = workflow.get_state(config={"configurable": {"thread_id": thread_id}})
+        elapsed_time = time.time() - start_time
         ai_response = response.values["generated_response"]
         
-        console.print(Panel(Markdown(ai_response), title="[bold magenta]AI[/bold magenta]", border_style="magenta"))
+        console.print(
+            Panel(
+                Markdown(ai_response),
+                title="[bold magenta]AI[/bold magenta]",
+                subtitle=f"[dim]Time taken: {elapsed_time:.2f}s[/dim]",
+                border_style="magenta",
+            )
+        )

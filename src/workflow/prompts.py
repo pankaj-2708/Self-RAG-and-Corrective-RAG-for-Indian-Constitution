@@ -5,7 +5,7 @@ from workflow.schemas import (
     parser_for_schema_for_check_answer_grounded_node,
     parser_for_revise_answer_node,
     parser_for_is_answer_useful_node,
-    parser_for_rewrite_query_node,
+    parser_for_rewrite_answer_node,
     parser_for_retriever_query_node,
     parser_for_web_search_query_node,
 )
@@ -74,16 +74,11 @@ Some contexts may also be web search results with URLs.
 
 ANSWER CONSTRUCTION RULES:
 1. **Strict Grounding**: Use ONLY the provided contexts. Do NOT add any information from your own training data. If the answer is not present in the contexts, explicitly state: "The information requested is not available in the provided documents." If the query relates to a Constitutional Part, Schedule, or Preamble, note that the vector store only covers Articles and the information may not be retrievable.
-2. **Answer Structure**: Organize your answer as follows:
-   a. **Direct Answer**: Lead with the most directly relevant legal provision(s) and their statutory text.
-   b. **Explanation**: Explain the provision in clear, accessible language. If legal terms appear, briefly clarify them for a general audience.
-   c. **Related Provisions**: If the contexts contain related sections/articles that provide additional relevant context (e.g., exceptions, explanations, related offenses), include them.
-3. **Citation Format**: For every legal claim, cite the source immediately inline:
+2. **Citation Format**: For every legal claim, cite the source immediately inline:
    - For IPC: cite as "Section [number] of the IPC" (e.g., "Section 302 of the IPC states that...").
    - For Constitution: cite as "Article [number] of the Constitution" (e.g., "Article 21 of the Constitution guarantees...").
    - For web search results: cite as "[Title](URL)" (e.g., "According to [Supreme Court judgment on...](https://...)").
-4. **Completeness**: Address ALL aspects of the user's query. If the query has multiple parts, address each part explicitly. If only some parts can be answered from the contexts, answer those and state that the remaining parts are not covered.
-5. **Tone**: Maintain a professional, authoritative, and objective legal tone while remaining accessible to a non-lawyer audience.
+3. **Completeness**: Address ALL aspects of the user's query. If the query has multiple parts, address each part explicitly. If only some parts can be answered from the contexts, answer those and state that the remaining parts are not covered.
 
 Output format - {parser_for_answer_from_context_node.get_format_instructions()}"""
 
@@ -151,25 +146,29 @@ NOTE: A grounded, accurate answer that partially addresses the query is still us
 Output format - {parser_for_is_answer_useful_node.get_format_instructions()}"""
 
 
-sys_prompt_for_rewrite_query_node = f"""You are a legal search optimization expert. The user's original query did not retrieve sufficiently useful results. Your task is to rewrite the query to maximize retrieval quality from a vector database.
+sys_prompt_for_rewrite_answer_node = f"""You are a legal answer refinement expert. You will receive:
+- The user's original query
+- A previously generated answer
+- The relevant source contexts
 
-VECTOR DATABASE CONTENT:
-The database contains the full, current text of:
-1. Indian Penal Code (IPC), 1860 — all sections with headings, statutory text, illustrations, and explanations/exceptions.
-2. Constitution of India — all Articles with text and amendments.
+SITUATION:
+The previous answer has been verified as **factually grounded** in the provided contexts — it does NOT contain hallucinations or unsupported claims. However, it does NOT directly or adequately address the user's specific question. The answer may be tangential, overly generic, or focused on the wrong aspect of the query.
 
-REWRITE STRATEGY:
-1. **Preserve intent**: The rewritten query must seek the SAME information as the original. Do not change the user's goal.
-2. **Add legal precision**: If the user's query uses colloquial language, expand with formal legal terminology (e.g., "stealing" → "theft under Section 378-382 IPC", "free speech" → "freedom of speech and expression under Article 19(1)(a)").
-3. **Be specific**: If the original query is too broad, narrow it to the most likely specific provisions (e.g., "rights of arrested persons" → "rights of arrested persons Article 22 Constitution of India").
-4. **Include alternate terms**: Add synonyms and alternative legal phrasings that might match chunk text (e.g., "dowry death" → "dowry death Section 304B IPC bride burning").
-5. **Remove noise**: Strip conversational filler, greetings, and non-query text.
+YOUR TASK:
+Rewrite the answer so that it **directly addresses the user's query** while remaining **fully grounded** in the provided contexts.
 
-EXAMPLES:
-- Original: "what happens if someone kills another person" → Rewritten: "Section 302 IPC punishment for murder and Section 300 definition of murder culpable homicide"
-- Original: "can police arrest without warrant" → Rewritten: "arrest without warrant provisions IPC and constitutional safeguards Article 22 rights of arrested persons"
+REWRITE RULES:
+1. **Address the query head-on**: The rewritten answer must directly answer what the user asked. If the user asked about a specific section, article, right, punishment, or concept, lead with that.
+2. **Stay grounded**: Do NOT introduce any new facts, claims, or legal references that are not present in the provided contexts. Every statement must be traceable to the contexts.
+3. **Reorganize, don't fabricate**: You may reorganize, reframe, emphasize different parts of the context, or change the structure of the answer — but all content must come from the contexts.
+4. **Maintain citations**: Every legal claim must cite its source:
+   - IPC: "Section [number] of the IPC"
+   - Constitution: "Article [number] of the Constitution"
+   - Web results: "[Title](URL)"
+5. **Be complete**: Address ALL parts of the user's query that can be answered from the contexts. If some parts cannot be answered, explicitly state so.
+6. **Professional tone**: Maintain a clear, authoritative, and objective legal tone.
 
-Output Format - {parser_for_rewrite_query_node.get_format_instructions()}"""
+Output Format - {parser_for_rewrite_answer_node.get_format_instructions()}"""
 
 sys_prompt_for_retriever_query_node = f"""You are a search query optimizer. Your task is to analyze the user's query and generate an optimized list of search queries (keys) for retrieving relevant context from our internal vector database.
 
@@ -184,12 +183,16 @@ OPTIMIZATION INSTRUCTIONS:
 - Analyze the user's query and generate only the required number of optimized search queries (keys) needed to retrieve relevant context. If 1 query is sufficient (e.g. for simple or direct queries like "What is Article 21?"), generate only 1 query. Generate at most 3 queries.
 - For each generated search query, identify if it targets a specific Article of the Constitution (e.g., "Article 21") or Section of the IPC (e.g., "Section 302"). If so, set the corresponding query's `doc_type` to "Constitution" or "IPC", and extract the clean, exact number (e.g., "21" or "302") into `number`. If no specific section/article is targeted by that query, set `doc_type` to "None" and `number` to null.
 
-QUERY DIVERSITY:
+QUERY DIVERSITY & DEDUPLICATION:
 - When generating multiple queries, ensure each query targets a DIFFERENT aspect, angle, or legal concept related to the user's question. Avoid generating paraphrases of the same query.
+- **CRITICAL - NO DUPLICATE NUMBERS**: Never generate multiple queries that resolve to the same (doc_type, number) pair. Each unique Article or Section number should appear in AT MOST ONE query. Generating multiple queries for the same Article/Section (e.g., three different phrasings for Article 111) is wasteful because they all retrieve the exact same document chunk. Instead, generate ONE well-crafted query for that Article/Section and use remaining query slots for genuinely different Articles/Sections or broader semantic searches (with doc_type "None").
+- If the user's question is entirely about a single Article or Section, generate only 1 query targeting that specific number. Do NOT create multiple paraphrases of the same Article/Section.
 - Example: For "What are the rights and restrictions on free speech in India?":
-  1. "Article 19(1)(a) freedom of speech and expression" (the right itself)
-  2. "Article 19(2) reasonable restrictions on free speech" (the restrictions)
-  3. "IPC sections related to speech offenses defamation sedition" (IPC angle)
+  1. "Article 19(1)(a) freedom of speech and expression" (doc_type: "Constitution", number: "19") — covers the right itself
+  2. "Article 19(2) reasonable restrictions on free speech" — WRONG, same number "19" as query 1, so MERGE into query 1 or skip
+  2. (correct) "IPC sections related to speech offenses defamation sedition" (doc_type: "None", number: null) — different angle
+- Example: For "What does Article 111 say about President's assent?":
+  Generate only 1 query: "Article 111 President assent to Bills" (doc_type: "Constitution", number: "111"). Do NOT generate 2-3 paraphrases of the same Article.
 
 METADATA EXTRACTION EXAMPLES:
 - "What does Article 21 say?" → doc_type: "Constitution", number: "21"

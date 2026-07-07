@@ -7,7 +7,7 @@ def is_relevant_condition(state: schema):
     return len(state["relevant_contexts"]) > 0
 
 def is_grounded_condition(state: schema):
-    return state["is_grounded"] and state["max_retry_for_revise_answer"] > 0
+    return state["is_grounded"]=="fully_supported" or state["max_retry_for_revise_answer"] <= 0
 
 def is_answer_useful_condition(state: schema):
-    return state["is_answer_useful"] and state["max_retry_for_rewrite_query"] > 0
+    return state["is_answer_useful"] or state["max_retry_for_answer_relevancy"] <= 0

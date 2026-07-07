@@ -42,8 +42,8 @@ generation_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.7)
 grounding_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.0)
 
 
-# Rewrites queries to improve retrieval quality
-query_rewrite_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.3)
+# Rewrites answers to better address the user's query
+answer_rewrite_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.5)
 
 # Judges whether an answer is useful to the user
 judge_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.0)
@@ -60,4 +60,4 @@ vector_store = Chroma(
 retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 3})
 
 # search tools
-tavily_tool = TavilySearch(max_results=3)
+tavily_tool = TavilySearch(max_results=2)

@@ -11,78 +11,51 @@ The system dynamically decides between internal database retrieval, web search f
 Below is the complete state machine representing the LangGraph workflow:
 
 ```mermaid
-flowchart TD
-    %% Styling definitions
-    classDef startEnd fill:#d4edda,stroke:#28a745,stroke-width:2px,color:#155724;
-    classDef decision fill:#fff3cd,stroke:#ffc107,stroke-width:2px,color:#856404;
-    classDef process fill:#e8f4fd,stroke:#17a2b8,stroke-width:2px,color:#0c5460;
-    classDef loopNode fill:#f8d7da,stroke:#dc3545,stroke-width:2px,color:#721c24;
-
-    %% Nodes
-    Start(["Start<br>(Initiate the user workflow)"]):::startEnd
-    End(["End<br>(Terminate the workflow loop)"]):::startEnd
-
-    DeciderNode["Retrieval Decider<br>(Analyze query and determine route)"]:::process
-    DeciderCond{"Decider Route<br>(Choose query processing path)"}:::decision
-
-    DirectNode["Direct Generation<br>(Generate answer directly from LLM)"]:::process
-
-    GenRetrieverQueryNode["Generate Retriever Query<br>(Optimize query for vector search)"]:::process
-    RetrieveNode["Retrieve Documents<br>(Query Chroma vector store)"]:::process
-
-    Fanout["Fanout Contexts<br>(Split contexts for parallel evaluation)"]:::process
-    IsRelevantNode["Is Relevant<br>(Check context relevance to query)"]:::process
-    AggregateNode["Aggregate Relevance<br>(Consolidate parallel relevance results)"]:::process
-    IsRelevantCond{"Relevance Check<br>(Are any retrieved contexts relevant?)"}:::decision
-
-    GenWebSearchQueryNode["Generate Web Search Query<br>(Optimize query for web search)"]:::process
-    WebSearchNode["Web Search<br>(Search web via Tavily API)"]:::process
-
-    AnswerFromContextNode["Answer From Context<br>(Synthesize answer using retrieved context)"]:::process
-
-    CheckAnswerGroundedNode["Check Answer Grounded<br>(Verify answer grounding in context)"]:::process
-    IsGroundedCond{"Grounding Check<br>(Is answer grounded with retries?)"}:::decision
-
-    ReviseAnswerNode["Revise Answer<br>(Refine answer using critic model)"]:::process
-
-    IsAnswerUsefulNode["Is Answer Useful<br>(Judge if answer solves query)"]:::process
-    IsUsefulCond{"Utility Check<br>(Is answer useful with retries?)"}:::decision
-
-    RewriteQueryNode["Rewrite Query<br>(Reframe query and decrement retries)"]:::loopNode
-
-    %% Connections
-    Start --> DeciderNode
-    DeciderNode --> DeciderCond
-
-    DeciderCond -- "None" --> DirectNode
-    DeciderCond -- "retrieval" --> GenRetrieverQueryNode
-    DeciderCond -- "web_search" --> GenWebSearchQueryNode
-
-    DirectNode --> End
-
-    GenRetrieverQueryNode --> RetrieveNode
-    RetrieveNode --> Fanout
-    Fanout -- "Send (Parallel Execution)" --> IsRelevantNode
-    IsRelevantNode --> AggregateNode
-    AggregateNode --> IsRelevantCond
-
-    IsRelevantCond -- "Yes" --> AnswerFromContextNode
-    IsRelevantCond -- "No" --> GenWebSearchQueryNode
-
-    GenWebSearchQueryNode --> WebSearchNode
-    WebSearchNode --> AnswerFromContextNode
-
-    AnswerFromContextNode --> CheckAnswerGroundedNode
-    CheckAnswerGroundedNode --> IsGroundedCond
-
-    IsGroundedCond -- "Yes" --> IsAnswerUsefulNode
-    IsGroundedCond -- "No" --> ReviseAnswerNode
-    ReviseAnswerNode --> IsAnswerUsefulNode
-
-    IsAnswerUsefulNode --> IsUsefulCond
-    IsUsefulCond -- "Yes" --> End
-    IsUsefulCond -- "No" --> RewriteQueryNode
-    RewriteQueryNode --> DeciderNode
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	retrieval_decider_node(retrieval_decider_node)
+	generate_retriever_query_node(generate_retriever_query_node)
+	retrieve_node(retrieve_node)
+	direct_generation_node(direct_generation_node)
+	is_relevant_node(is_relevant_node)
+	answer_from_context_node(answer_from_context_node)
+	check_answer_grounded_node(check_answer_grounded_node)
+	revise_answer_node(revise_answer_node)
+	is_answer_useful_node(is_answer_useful_node)
+	rewrite_answer_node(rewrite_answer_node)
+	generate_web_search_query_node(generate_web_search_query_node)
+	web_search_node(web_search_node)
+	aggregate_retrieval(aggregate_retrieval)
+	aggregate_relevance(aggregate_relevance)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> retrieval_decider_node;
+	aggregate_relevance -. &nbsp;True&nbsp; .-> answer_from_context_node;
+	aggregate_relevance -. &nbsp;False&nbsp; .-> generate_web_search_query_node;
+	aggregate_retrieval -.-> is_relevant_node;
+	answer_from_context_node --> check_answer_grounded_node;
+	check_answer_grounded_node -. &nbsp;True&nbsp; .-> is_answer_useful_node;
+	check_answer_grounded_node -. &nbsp;False&nbsp; .-> revise_answer_node;
+	generate_retriever_query_node -.-> retrieve_node;
+	generate_web_search_query_node --> web_search_node;
+	is_answer_useful_node -. &nbsp;True&nbsp; .-> __end__;
+	is_answer_useful_node -. &nbsp;False&nbsp; .-> rewrite_answer_node;
+	is_relevant_node --> aggregate_relevance;
+	retrieval_decider_node -. &nbsp;None&nbsp; .-> direct_generation_node;
+	retrieval_decider_node -. &nbsp;retrieval&nbsp; .-> generate_retriever_query_node;
+	retrieval_decider_node -. &nbsp;web_search&nbsp; .-> generate_web_search_query_node;
+	retrieve_node --> aggregate_retrieval;
+	revise_answer_node --> check_answer_grounded_node;
+	rewrite_answer_node --> is_answer_useful_node;
+	web_search_node --> answer_from_context_node;
+	direct_generation_node --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
 ```
 
 ---
@@ -90,11 +63,11 @@ flowchart TD
 ## 🚀 Key Features
 
 1. **Intelligent Query Routing (`retrieval_decider_node`)**: Evaluates if the query is a general knowledge question (`None`), requires constitutional/IPC lookup (`retrieval`), or concerns recent happenings/un-indexed details (`web_search`).
-2. **Multi-Query Retrieval (`generate_retriever_query_node` & `retrieve_node`)**: Generates optimized search queries to ensure comprehensive fetching from the Chroma database.
+2. **Parallel Multi-Query Retrieval (`generate_retriever_query_node`, `fanout_retrieve_node` & `retrieve_node`)**: Generates optimized search queries and executes parallel vector searches for comprehensive context fetching.
 3. **Parallel Relevance Verification (`fanout_relevant_node` & `is_relevant_node`)**: Distributes retrieved documents in parallel (Map step) to score and filter irrelevant content, and combines them (Reduce step) to clean up noise.
 4. **Web Search Fallback (`web_search_node`)**: Integrates the Tavily Search API as a backup when local retrieval fails to find relevant context.
 5. **Hallucination & Grounding Check (`check_answer_grounded_node`)**: Grades the synthesized answer against the retrieved evidence. If the answer is ungrounded, it invokes `revise_answer_node` to regenerate using a critic model.
-6. **Goal-Driven Query Rewriting (`rewrite_query_node`)**: If the final response is judged non-useful (in `is_answer_useful_node`), it rewrites the initial user query and restarts the RAG process (up to a configured limit of retries).
+6. **Answer Refinement (`rewrite_answer_node`)**: If the final response is judged non-useful (in `is_answer_useful_node`), it rewrites the generated answer directly based on context and evaluates its utility again.
 7. **Thread-Based Memory (`SqliteSaver`)**: Persists chat history across sessions using SQLite state checkpointers.
 
 ---
