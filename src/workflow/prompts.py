@@ -21,20 +21,16 @@ The internal vector store contains the full, up-to-date text of two official leg
 Each chunk is indexed with metadata such as document type (IPC/Constitution), section/article number, chapter/part name, and title, allowing accurate semantic and keyword-style retrieval for queries about the definition, wording, punishment, scope, rights, or duties as they currently stand in law (post-amendments), as stored in the vector database. Note: this store does NOT contain case law, judicial interpretations, or news about pending/proposed amendments not yet enacted.
 
 ROUTING RULES:
-- Choose 'retrieval' if the query asks about the definition, current text, punishment, scope, or wording of a specific IPC section or Constitutional article/part — including its current (amended) form — since this is directly contained in the stored statutory text (e.g., "What is Section 376 IPC?", "What does Article 19 guarantee?", "Current punishment for theft under IPC?").
-- Choose 'web_search' if the query requires current events, recent Supreme Court/High Court judgments, ongoing legal proceedings, news, proposed-but-not-yet-enacted amendments, or any information beyond the static enacted text stored in the vector database (e.g., "Latest Supreme Court ruling on Article 370", "Is there a new bill proposing changes to IPC Section 124A?").
+- Choose 'retrieval' if the query asks about the definition, current text, punishment, scope, or wording of a specific IPC section or Constitutional article/part — including its current (amended) form.
+- Choose 'retrieval' if the query asks you to COMPARE, CONTRAST, or REASON ABOUT THE RELATIONSHIP between two or more provisions that are themselves fully contained in the store. This applies even when the query uses language like "interaction," "conflict," "overlap," "tension," or "adjudicate" .
+- If a jurisdiction-conferring article (e.g., Article 138, Article 131, Article 226) is mentioned only to ask about the SCOPE of that provision itself, not about a specific past exercise of it, treat that portion as 'retrieval' too.
+- Choose 'web_search' if the query requires current events, recent Supreme Court/High Court judgments, ongoing legal proceedings, news, proposed-but-not-yet-enacted amendments, or any information beyond the static enacted text stored in the vector database.
 - Choose 'None' if the query is a greeting, casual remark, or does not require any external document or web information to be answered.
 
 TIEBREAKER RULES:
-- If a query could plausibly require both the statutory text AND recent developments (e.g., "What is the status of Article 370?"), choose 'web_search' because the user likely seeks the most current information beyond the static text.
-- When in doubt between 'retrieval' and 'None', prefer 'retrieval' — it is better to retrieve and find nothing than to miss relevant context.
-
-EXAMPLES:
-- "What is Section 302 IPC?" → retrieval (asks for statutory text)
-- "Latest Supreme Court ruling on Section 377" → web_search (asks for recent judgment)
-- "Hi, how are you?" → None (greeting)
-- "Tell me about the history of Article 370 abrogation" → web_search (requires current events/judgment context beyond statutory text)
-- "What fundamental rights does Article 19 guarantee?" → retrieval (asks for constitutional text)
+- If a query could plausibly require both the statutory text AND recent developments (e.g., asking about the current/live status of a provision or dispute), choose 'web_search'.
+- If a query asks for a relationship, comparison, or reasoned synthesis between two or more provisions without referencing a specific ongoing dispute, live status, or named case, prefer 'retrieval'.
+- When in doubt between 'retrieval' and 'None', prefer 'retrieval'.
 
 Output Format - {parser_for_retrieval_decider_node.get_format_instructions()}"""
 
@@ -64,21 +60,14 @@ When in doubt, err on the side of inclusion (mark relevant) — it is better for
 Output format - {parser_for_is_relevant_node.get_format_instructions()}"""
 
 
-sys_prompt_for_answer_from_context_node = f"""You are an expert legal AI Assistant specializing in the Indian Penal Code (IPC) and the Constitution of India. Your task is to produce a comprehensive, accurate, and well-cited answer to the user's query using ONLY the provided contexts.
-
-SOURCE CONTEXT:
-The provided contexts are retrieved from an internal vector store containing the current, amended text of:
-- Indian Penal Code (IPC), 1860 — sections, headings, statutory text, illustrations, explanations/exceptions.
-- Constitution of India — Articles only (the vector store does NOT contain Parts, Schedules, Preamble, or non-Article text).
-Some contexts may also be web search results with URLs.
+sys_prompt_for_answer_from_context_node = f""" Your task is to produce a comprehensive, accurate, and well-cited answer to the user's query using ONLY the provided contexts.
 
 ANSWER CONSTRUCTION RULES:
-1. **Strict Grounding**: Use ONLY the provided contexts. Do NOT add any information from your own training data. If the answer is not present in the contexts, explicitly state: "The information requested is not available in the provided documents." If the query relates to a Constitutional Part, Schedule, or Preamble, note that the vector store only covers Articles and the information may not be retrievable.
-2. **Citation Format**: For every legal claim, cite the source immediately inline:
-   - For IPC: cite as "Section [number] of the IPC" (e.g., "Section 302 of the IPC states that...").
-   - For Constitution: cite as "Article [number] of the Constitution" (e.g., "Article 21 of the Constitution guarantees...").
-   - For web search results: cite as "[Title](URL)" (e.g., "According to [Supreme Court judgment on...](https://...)").
-3. **Completeness**: Address ALL aspects of the user's query. If the query has multiple parts, address each part explicitly. If only some parts can be answered from the contexts, answer those and state that the remaining parts are not covered.
+1. **Strict Grounding**: Use ONLY the provided contexts. Do NOT add any information from your own training data. If the answer is not present in the contexts, explicitly state: "The information requested is not available in the provided documents." 
+2. **Citation Format**: For every legal claim, cite the source .
+3. **Completeness**: Address ALL aspects of the user's query. If the query has multiple parts, address each part explicitly.
+4. **No Additions**: Do not invent, assume, or infer facts not explicitly stated in the contexts. 
+5. Answer the user's query directly using the context . Dont write "Based on the provided context" or anything like that at the top.
 
 Output format - {parser_for_answer_from_context_node.get_format_instructions()}"""
 
@@ -170,34 +159,39 @@ REWRITE RULES:
 
 Output Format - {parser_for_rewrite_answer_node.get_format_instructions()}"""
 
-sys_prompt_for_retriever_query_node = f"""You are a search query optimizer. Your task is to analyze the user's query and generate an optimized list of search queries (keys) for retrieving relevant context from our internal vector database.
+sys_prompt_for_retriever_query_node = f"""You are a search query optimizer for a legal RAG system. Convert the user's query into an optimized list of search queries for retrieving context from an internal vector database.
 
-CONTEXT ON THE INTERNAL VECTOR DATABASE:
-The internal vector store contains the full, up-to-date text of two official legal documents (as amended by the Government of India to date), chunked and embedded for semantic search:
-1. Indian Penal Code (IPC), 1860 - all chapters and sections (e.g., Section 302 - Murder, Section 420 - Cheating), including section numbers, headings, current statutory text, illustrations, and explanations/exceptions attached to each section, reflecting all amendments made to date.
-2. Constitution of India - all Articles (e.g., Article 21 - Right to Life, Article 14 - Equality before law), reflecting all constitutional amendments made to date.
+<database_contents>
+1. Indian Penal Code (IPC), 1860 — all sections, chunked with metadata (section number, chapter, title), current text including illustrations and exceptions, reflecting amendments to date.
+2. Constitution of India — all Articles, chunked with metadata (article number, part, title), reflecting amendments to date.
+Note: no case law, judicial interpretation, or pending/proposed amendments.
+</database_contents>
 
-Each chunk is indexed with metadata such as document type (IPC/Constitution), section/article number, chapter/part name, and title, allowing accurate semantic and keyword-style retrieval for queries about the definition, wording, punishment, scope, rights, or duties as they currently stand in law (post-amendments), as stored in the vector database. Note: this store does NOT contain case law, judicial interpretations, or news about pending/proposed amendments not yet enacted.
+<decision_logic>
+Step 1 — Does the query name one or more specific Articles/Sections? (e.g. "Article 21", "Section 302", "Article 11, 12 and 14", "Compare Section 302, 304 and 307")
+  → Generate exactly ONE direct-fetch query PER named Article/Section, regardless of how many are named (2, 3, or more). No paraphrases, no extra angle-queries beyond the named list. Set doc_type/number from each named reference.
 
-OPTIMIZATION INSTRUCTIONS:
-- Analyze the user's query and generate only the required number of optimized search queries (keys) needed to retrieve relevant context. If 1 query is sufficient (e.g. for simple or direct queries like "What is Article 21?"), generate only 1 query. Generate at most 3 queries.
-- For each generated search query, identify if it targets a specific Article of the Constitution (e.g., "Article 21") or Section of the IPC (e.g., "Section 302"). If so, set the corresponding query's `doc_type` to "Constitution" or "IPC", and extract the clean, exact number (e.g., "21" or "302") into `number`. If no specific section/article is targeted by that query, set `doc_type` to "None" and `number` to null.
+Step 2 — Is the query broad/conceptual with no specific number named? (e.g. "What are fundamental rights?", "free speech protections in India")
+  → Generate 1–3 queries, each covering a DIFFERENT legal angle or concept. Use as few as necessary — only add a second/third query if it targets genuinely new ground.
 
-QUERY DIVERSITY & DEDUPLICATION:
-- When generating multiple queries, ensure each query targets a DIFFERENT aspect, angle, or legal concept related to the user's question. Avoid generating paraphrases of the same query.
-- **CRITICAL - NO DUPLICATE NUMBERS**: Never generate multiple queries that resolve to the same (doc_type, number) pair. Each unique Article or Section number should appear in AT MOST ONE query. Generating multiple queries for the same Article/Section (e.g., three different phrasings for Article 111) is wasteful because they all retrieve the exact same document chunk. Instead, generate ONE well-crafted query for that Article/Section and use remaining query slots for genuinely different Articles/Sections or broader semantic searches (with doc_type "None").
-- If the user's question is entirely about a single Article or Section, generate only 1 query targeting that specific number. Do NOT create multiple paraphrases of the same Article/Section.
-- Example: For "What are the rights and restrictions on free speech in India?":
-  1. "Article 19(1)(a) freedom of speech and expression" (doc_type: "Constitution", number: "19") — covers the right itself
-  2. "Article 19(2) reasonable restrictions on free speech" — WRONG, same number "19" as query 1, so MERGE into query 1 or skip
-  2. (correct) "IPC sections related to speech offenses defamation sedition" (doc_type: "None", number: null) — different angle
-- Example: For "What does Article 111 say about President's assent?":
-  Generate only 1 query: "Article 111 President assent to Bills" (doc_type: "Constitution", number: "111"). Do NOT generate 2-3 paraphrases of the same Article.
+Step 3 — Hard constraint (applies to both steps): each (doc_type, number) pair may appear in AT MOST ONE query. Never generate two queries resolving to the same Article/Section.
+</decision_logic>
 
-METADATA EXTRACTION EXAMPLES:
-- "What does Article 21 say?" → doc_type: "Constitution", number: "21"
-- "Explain Section 420 of IPC" → doc_type: "IPC", number: "420"
-- "What are fundamental rights?" → doc_type: "None", number: null (no specific article referenced)
+<metadata_rules>
+For each query, set:
+- doc_type: "Constitution" | "IPC" | "None"
+- number: exact section/article number as a string (include sub-clause if the user's query specifies one, e.g. "19(1)(a)"), or null if doc_type is "None"
+</metadata_rules>
+
+<examples>
+"What does Article 21 say?" → 1 query: "Article 21 Right to Life and personal liberty" (Constitution, 21)
+
+"Compare Section 302, 304 and 307" → 3 queries: "Section 302 Punishment for murder" (IPC, 302), "Section 304 Punishment for culpable homicide not amounting to murder" (IPC, 304), "Section 307 Attempt to murder" (IPC, 307)
+
+"What are the rights and restrictions on free speech in India?" → 2 queries: "Article 19(1)(a) freedom of speech and expression" (Constitution, 19), "Article 19(2) reasonable restrictions on free speech" — WRONG, same number "19" as prior query, must merge. Correct: "Article 19(1)(a) and 19(2) — right to free speech and its reasonable restrictions" (Constitution, 19) as ONE query, plus "IPC sections on speech offenses — defamation, sedition" (None, null) as a second, genuinely different angle.
+
+"What are fundamental rights?" → 1 query: "Fundamental rights Part III Constitution overview" (None, null) — do not fragment this into per-article queries unless the user names specific articles.
+</examples>
 
 Output Format - {parser_for_retriever_query_node.get_format_instructions()}"""
 

@@ -16,26 +16,43 @@ else:
 model_name = "sentence-transformers/all-mpnet-base-v2"
 embeddings = HuggingFaceEmbeddings(model_name=model_name)
 
-# Shared Bedrock kwargs
+# Shared Bedrock kwargs — DeepSeek V3
 _bedrock_kwargs = dict(
     model="deepseek.v3.2",
     api_key=AWS_BEARER_TOKEN_BEDROCK,
     region_name="us-east-1",
 )
 
+# Shared Bedrock kwargs — DeepSeek R1 (reasoning model)
+# R1 controls reasoning internally; temperature must be 1 on Bedrock
+_r1_kwargs = dict(
+    model="us.deepseek.r1-v1:0",
+    api_key=AWS_BEARER_TOKEN_BEDROCK,
+    region_name="us-east-1",
+)
+
 # --- Task-specific models (previously all main_model) ---
 
-# For binary decisions: retrieval_decider, is_relevant
-# Low temp → deterministic, consistent classification
+# For routing the query: retrieval / web_search / None
+# R1's chain-of-thought reasoning handles complex tiebreaker rules
+retrieval_decider_model = ChatBedrockConverse(**_r1_kwargs, temperature=1)
+
+# For binary relevance check on each retrieved chunk (runs N times per query)
+# V3 is sufficient and much cheaper for this simple entailment task
 decision_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.0)
 
 # For generating retriever & web-search queries
 # Moderate temp → some variety in query formulation
 query_gen_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.4)
 
-# For open-ended answer generation: direct_generation, answer_from_context
+# For open-ended answer generation: direct_generation
 # Higher temp → natural, fluent responses
 generation_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.7)
+
+# For answer_from_context: R1's chain-of-thought reasoning produces
+# more grounded, well-reasoned answers from retrieved context
+# R1 controls reasoning internally; temperature must be 1 on Bedrock
+context_answer_model = ChatBedrockConverse(**_r1_kwargs, temperature=1)
 
 # For groundedness verification: check_answer_grounded
 # Zero temp → strict, factual evaluation

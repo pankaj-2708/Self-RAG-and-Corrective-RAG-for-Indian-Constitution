@@ -1,7 +1,8 @@
 from langchain_core.messages import HumanMessage, SystemMessage
 from workflow.state import schema
 from workflow.config import (
-    decision_model, query_gen_model, generation_model, grounding_model,
+    decision_model, retrieval_decider_model, query_gen_model, generation_model,
+    context_answer_model, grounding_model,
     critic_model, judge_model, answer_rewrite_model,
     retriever, tavily_tool, vector_store
 )
@@ -30,23 +31,48 @@ from workflow.prompts import (
 )
 from langgraph.types import Send
 
+def _extract_r1_text(content) -> str:
+    """Extract the final text output from a DeepSeek R1 response via Bedrock.
+    
+    LangChain's ChatBedrockConverse returns response.content as a list of dicts
+    for R1, e.g.:
+      [{'type': 'text', 'text': '...'},
+       {'type': 'reasoning_content', 'reasoning_content': {'text': '...'}}]
+    This helper extracts only the 'text' block, ignoring the reasoning block.
+    Falls back gracefully if content is already a plain string (other models).
+    """
+    if isinstance(content, list):
+        parts = [block["text"] for block in content if block.get("type") == "text"]
+        return " ".join(parts).strip()
+    return content  # plain string — other models
+
 def retrieval_decider_node(state: schema):
     inp = [
         SystemMessage(content=sys_prompt_for_retrieval_decider_node),
         HumanMessage(content=f"User Query - {state['user_query']}"),
     ]
+    response = retrieval_decider_model.invoke(inp)
+    usage = response.usage_metadata or {}
+    # R1 via Bedrock returns content as a list of dicts — extract only the 'text' block
+    content = _extract_r1_text(response.content)
     res = parser_for_retrieval_decider_node.invoke(
-        decision_model.invoke(inp).content
+        content
     ).retrieval_required
-    return {"retrieval_required": res}
+    return {
+        "retrieval_required": res,
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0)
+    }
 
 def generate_retriever_query_node(state: schema):
     inp = [
         SystemMessage(content=sys_prompt_for_retriever_query_node),
         HumanMessage(content=f"User Query - {state['user_query']}"),
     ]
+    response = query_gen_model.invoke(inp)
+    usage = response.usage_metadata or {}
     res = parser_for_retriever_query_node.invoke(
-        query_gen_model.invoke(inp).content
+        response.content
     )
     # Explicit check to enforce at most 3 queries
     queries = res.retriever_queries[:3]
@@ -59,7 +85,11 @@ def generate_retriever_query_node(state: schema):
         }
         for item in queries
     ]
-    return {"retriever_queries": queries_dicts}
+    return {
+        "retriever_queries": queries_dicts,
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0)
+    }
 
 def fanout_retrieve_node(state: schema):
     queries = state.get("retriever_queries")
@@ -109,14 +139,16 @@ def aggregate_retrieval(state: schema):
     No state mutation — just ensures all retrieve_nodes finish before
     relevance evaluation begins."""
 
-    # removing duplicates and capping maximum no of relevent contexts
-    state['relevant_contexts']=list(set(state['relevant_contexts']))
-    state['relevant_contexts']=state['relevant_contexts'][:5]
-    return state
+    return {}
 
 def direct_generation_node(state: schema):
-    res = generation_model.invoke(state["user_query"]).content
-    return {"generated_response": res}
+    response = generation_model.invoke(state["user_query"])
+    usage = response.usage_metadata or {}
+    return {
+        "generated_response": response.content,
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0)
+    }
 
 def fanout_relevant_node(state:schema):
     contexts = state.get("retrieved_contexts", [])
@@ -139,23 +171,28 @@ def is_relevant_node(inp):
     sys_prompt = SystemMessage(content=sys_prompt_for_is_relevant_node)
     hmn_prompt = f"Query - {inp['user_query']}" + f"\n Context - \n {inp['context']}"
 
-    res = parser_for_is_relevant_node.invoke(
-            decision_model.invoke(
-                [sys_prompt, HumanMessage(content=hmn_prompt)]
-            ).content
-        )
+    response = decision_model.invoke(
+        [sys_prompt, HumanMessage(content=hmn_prompt)]
+    )
+    usage = response.usage_metadata or {}
+    res = parser_for_is_relevant_node.invoke(response.content)
     
+    out = {
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0)
+    }
     if res.is_relevant_context :
-        return {"relevant_contexts": [inp['context']] }
-    else:
-        return {}
+        out["relevant_contexts"] = [inp['context']]
+    return out
 
 def aggregate_relevance(state):
-    # plain pass-through node, just a sync point
-    return {}
+    # removing duplicates and capping maximum no of relevent contexts
+    state['relevant_contexts']=list(set(state['relevant_contexts']))
+    state['relevant_contexts']=state['relevant_contexts'][:5]
+    return state
 
 def answer_from_context_node(state: schema):
-    contexts = [x.content for x  in state["relevant_contexts"]]
+    contexts = state["relevant_contexts"]
     sys_prompt = SystemMessage(content=sys_prompt_for_answer_from_context_node)
 
     context = ""
@@ -168,13 +205,21 @@ def answer_from_context_node(state: schema):
     )
     inp = [sys_prompt,hmn_prompt]
 
+    response = context_answer_model.invoke(inp)
+    usage = response.usage_metadata or {}
+    # R1 via Bedrock returns content as a list of dicts — extract only the 'text' block
+    content = _extract_r1_text(response.content)
     res = parser_for_answer_from_context_node.invoke(
-        generation_model.invoke(inp).content
+        content
     ).response
-    return {"generated_response": res}
+    return {
+        "generated_response": res,
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0)
+    }
 
 def check_answer_grounded_node(state: schema):
-    contexts = [x.content for x  in state["relevant_contexts"]]
+    contexts = state["relevant_contexts"]
     sys_prompt = SystemMessage(content=sys_prompt_for_check_answer_grounded_node)
     context = ""
     for i in contexts:
@@ -185,14 +230,21 @@ def check_answer_grounded_node(state: schema):
         content=f"Answer - {state['generated_response']} \n Contexts - {context}"
     )
 
+    response = grounding_model.invoke([sys_prompt, human_pr])
+    usage = response.usage_metadata or {}
     res = parser_for_schema_for_check_answer_grounded_node.invoke(
-        grounding_model.invoke([sys_prompt, human_pr]).content
+        response.content
     )
 
-    return {"is_grounded": res.is_grounded, "evidence": res.evidence}
+    return {
+        "is_grounded": res.is_grounded,
+        "evidence": res.evidence,
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0)
+    }
 
 def revise_answer_node(state: schema):
-    contexts =[x.content for x  in state["relevant_contexts"]]
+    contexts = state["relevant_contexts"]
     context = ""
     for i in contexts:
         context += i
@@ -207,13 +259,17 @@ def revise_answer_node(state: schema):
         content=f"""Query - {user_query} \n\n Generated Response - {generated_response} \n\n Contexts - {context} \n\n Evidence - {evidence}"""
     )
 
+    response = critic_model.invoke([sys_prompt, human_pr])
+    usage = response.usage_metadata or {}
     revised_answer = parser_for_revise_answer_node.invoke(
-        critic_model.invoke([sys_prompt, human_pr]).content
+        response.content
     )
 
     return {
         "generated_response": revised_answer.revised_response,
-        "max_retry_for_revise_answer": state["max_retry_for_revise_answer"] - 1,
+        "max_retry_for_groundness_checking": state["max_retry_for_groundness_checking"] - 1,
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0)
     }
 
 def is_answer_useful_node(state: schema):
@@ -225,13 +281,19 @@ def is_answer_useful_node(state: schema):
         content=f"Query - {user_query} \n\n Generated Response - {generated_response}"
     )
 
+    response = judge_model.invoke([sys_prompt, human_pr])
+    usage = response.usage_metadata or {}
     res = parser_for_is_answer_useful_node.invoke(
-        judge_model.invoke([sys_prompt, human_pr]).content
+        response.content
     )
-    return {"is_answer_useful": res.is_useful}
+    return {
+        "is_answer_useful": res.is_useful,
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0)
+    }
 
 def rewrite_answer_node(state: schema):
-    contexts = [x.content for x in state["relevant_contexts"]]
+    contexts = state["relevant_contexts"]
     context = ""
     for i in contexts:
         context += i
@@ -245,12 +307,16 @@ def rewrite_answer_node(state: schema):
         content=f"""Query - {user_query} \n\n Previous Answer - {generated_response} \n\n Contexts - {context}"""
     )
 
+    response = answer_rewrite_model.invoke([sys_prompt, human_pr])
+    usage = response.usage_metadata or {}
     res = parser_for_rewrite_answer_node.invoke(
-        answer_rewrite_model.invoke([sys_prompt, human_pr]).content
+        response.content
     )
     return {
         "generated_response": res.rewritten_response,
-        "max_retry_for_answer_relevancy": state["max_retry_for_answer_relevancy"] - 1,
+        "max_retry_for_answer_useful_checking": state["max_retry_for_answer_useful_checking"] - 1,
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0)
     }
 
 def generate_web_search_query_node(state: schema):
@@ -258,10 +324,16 @@ def generate_web_search_query_node(state: schema):
         SystemMessage(content=sys_prompt_for_web_search_query_node),
         HumanMessage(content=f"User Query - {state['user_query']}"),
     ]
+    response = query_gen_model.invoke(inp)
+    usage = response.usage_metadata or {}
     res = parser_for_web_search_query_node.invoke(
-        query_gen_model.invoke(inp).content
+        response.content
     ).web_search_queries[:3]
-    return {"web_search_queries": res}
+    return {
+        "web_search_queries": res,
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0)
+    }
 
 def web_search_node(state: schema):
     queries = state.get("web_search_queries") or [state["user_query"]]

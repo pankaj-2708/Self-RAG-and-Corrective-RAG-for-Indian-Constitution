@@ -12,7 +12,7 @@ class schema(TypedDict):
     retriever_queries: Optional[List[dict]]
     web_search_queries: Optional[List[str]]
     retrieved_contexts: Annotated[List[str], operator.add]
-    relevant_contexts: Annotated[List[str], add_messages]
+    relevant_contexts: Annotated[List[str], operator.add]
     answer_for_query: str
     generated_response: str
     is_grounded: bool
@@ -20,6 +20,8 @@ class schema(TypedDict):
     is_answer_useful: bool
     evidence: str
     k: Optional[int] = Field(default=3)
-    max_retry_for_revise_answer: Optional[int] = Field(default=3)
-    max_retry_for_answer_relevancy: Optional[int] = Field(default=2)
+    max_retry_for_groundness_checking: Optional[int] = Field(default=3)
+    max_retry_for_answer_useful_checking: Optional[int] = Field(default=2)
     messages: List[BaseMessage]
+    input_tokens: Annotated[int, operator.add]
+    output_tokens: Annotated[int, operator.add]

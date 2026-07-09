@@ -44,8 +44,10 @@ if __name__ == "__main__":
         initial_state = {
             "user_query": human,
             "k": 2,
-            "max_retry_for_revise_answer": 2,
+            "max_retry_for_groundness_checking": 1,
             "max_retry_for_rewrite_query": 1,
+            "input_tokens": 0,
+            "output_tokens": 0,
         }
 
         start_time = time.time()
@@ -66,12 +68,14 @@ if __name__ == "__main__":
         response = workflow.get_state(config={"configurable": {"thread_id": thread_id}})
         elapsed_time = time.time() - start_time
         ai_response = response.values["generated_response"]
+        in_tokens = response.values.get("input_tokens", 0)
+        out_tokens = response.values.get("output_tokens", 0)
         
         console.print(
             Panel(
                 Markdown(ai_response),
                 title="[bold magenta]AI[/bold magenta]",
-                subtitle=f"[dim]Time taken: {elapsed_time:.2f}s[/dim]",
+                subtitle=f"[dim]Time taken: {elapsed_time:.2f}s | Input Tokens: {in_tokens} | Output Tokens: {out_tokens}[/dim]",
                 border_style="magenta",
             )
         )

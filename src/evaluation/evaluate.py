@@ -1,3 +1,5 @@
+import warnings
+warnings.filterwarnings("ignore")
 import os
 import sys
 import pandas as pd
@@ -10,7 +12,7 @@ from ragas import evaluate
 from ragas.metrics import (
     faithfulness,
     answer_relevancy,
-    context_precision,
+    NonLLMContextPrecisionWithReference,
     context_recall,
 )
 from langchain_aws import ChatBedrockConverse
@@ -20,8 +22,6 @@ from ragas.llms import LangchainLLMWrapper
 from pydantic import ValidationError
 from langchain_core.exceptions import OutputParserException
 from tqdm import tqdm
-import warnings
-warnings.filterwarnings("ignore")
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..',)))
 from workflow import graph
@@ -29,12 +29,30 @@ from workflow import graph
 # Load environment variables from .env
 load_dotenv()
 
+import glob
+import re
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../data"))
 test_set_path = os.path.join(DATA_DIR, "test_set.csv")
-results_path = os.path.join(DATA_DIR, "results.csv")
-progress_path = os.path.join(DATA_DIR, "evaluation_progress.csv")
-history_path = os.path.join(DATA_DIR, "evaluation_history.csv")
+
+RESULTS_DIR = os.path.join(DATA_DIR, "evaluation_progress_results")
+os.makedirs(RESULTS_DIR, exist_ok=True)
+
+progress_path = os.path.join(RESULTS_DIR, "evaluation_progress2.csv")
+history_path = os.path.join(RESULTS_DIR, "evaluation_history2.csv")
+all_results_path = os.path.join(RESULTS_DIR, "all_results2.csv")
+
+# Determine next version
+existing_files = glob.glob(os.path.join(RESULTS_DIR, "results_v*.csv"))
+versions = []
+for f in existing_files:
+    match = re.search(r'results_v(\d+)\.csv$', os.path.basename(f))
+    if match:
+        versions.append(int(match.group(1)))
+
+next_version = max(versions) + 1 if versions else 1
+results_path = os.path.join(RESULTS_DIR, f"results_v{next_version}.csv")
 
 # Initialize evaluator LLM and wrap it for Ragas 0.4.x
 evaluater_llm = ChatBedrockConverse(
@@ -64,8 +82,10 @@ def run_langgraph_rag(user_query, app, pbar=None):
         for chunk in app.stream({
             "user_query": user_query,
             "k": 2,
-            "max_retry_for_revise_answer": 2,
-            "max_retry_for_rewrite_query": 1
+            "max_retry_for_groundness_checking": 1,
+            "max_retry_for_answer_useful_checking": 1,
+            "input_tokens": 0,
+            "output_tokens": 0
         }, stream_mode="updates"):
             for node_name, node_state in chunk.items():
                 if pbar is not None:
@@ -121,6 +141,7 @@ if os.path.exists(progress_path):
                 "answer": row["answer"],
                 "contexts": contexts_list,
                 "ground_truth": row["ground_truth"],
+                "reference_contexts": ast.literal_eval(row["reference_contexts"]),
                 "synthesizer": row.get("synthesizer", "")
             })
             completed_questions.add(row["question"])
@@ -148,6 +169,7 @@ for _, row in pbar:
         "question": question,
         "answer": answer,         
         "contexts": contexts,     
+        "reference_contexts":ast.literal_eval(row['reference_contexts']),
         "ground_truth": ground_truth,
         "synthesizer": row["synthesizer_name"]
     })
@@ -170,7 +192,7 @@ ragas_results = evaluate(
     metrics=[
         faithfulness,
         answer_relevancy,
-        context_precision,
+        NonLLMContextPrecisionWithReference(),
         context_recall,
     ],
     llm=evaluater_llm,
@@ -181,6 +203,28 @@ print(ragas_results)
 # Convert results to a DataFrame and save
 ragas_results_df = ragas_results.to_pandas()
 ragas_results_df.to_csv(results_path, index=False)
+
+# Update all_results.csv with overall metrics
+overall_metrics = {"id": f"v{next_version}"}
+# Check if ragas_results supports .items() directly or if we should iterate over it
+try:
+    for metric_name, score in ragas_results.items():
+        overall_metrics[metric_name] = score
+except AttributeError:
+    # Fallback to computing average from dataframe
+    metrics_cols = [c for c in ragas_results_df.columns if pd.api.types.is_numeric_dtype(ragas_results_df[c])]
+    for c in metrics_cols:
+        overall_metrics[c] = ragas_results_df[c].mean()
+
+metrics_df = pd.DataFrame([overall_metrics])
+if os.path.exists(all_results_path):
+    all_results_df = pd.read_csv(all_results_path)
+    all_results_df = pd.concat([all_results_df, metrics_df], ignore_index=True)
+else:
+    all_results_df = metrics_df
+
+all_results_df.to_csv(all_results_path, index=False)
+
 
 # Append to history file with timestamp
 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")

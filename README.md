@@ -134,3 +134,15 @@ python src/cli.py
 ### Special Commands inside CLI:
 - `/new`: Resets the chat history and spawns a new conversation thread.
 - `exit`: Shuts down the interactive loop.
+
+---
+
+## 📊 Evaluation Notes
+
+### Why `context_precision` was excluded from this evaluation
+
+Ragas's LLM-based `context_precision` metric evaluates each retrieved chunk independently against the full generated answer, not against the question or against the combined set of retrieved chunks. The metric's own judge prompt is: "Given question, answer and context verify if the context was useful in arriving at the given answer" (ragas source, `_context_precision.py`).
+
+This design breaks down for multi-hop questions in our dataset — e.g. questions that require synthesizing two separate Constitution articles into one answer. Even when the retriever pulls exactly the correct two articles and nothing else, the metric checks each article in isolation against the full two-part answer. Since neither article alone supports the whole answer, the judge LLM returns a verdict of 0 for both, producing a `context_precision` score of 0 despite perfect retrieval.
+
+This isn't unique to our setup — it's a documented characteristic of the metric. Other users have hit the same failure pattern, e.g. one case where `context_recall` was 1.0 (all needed info was retrieved) while `context_precision` was 0.0 for the same retrieval (Ragas GitHub #308), and others have questioned why the metric compares chunks against the answer rather than the question (Ragas GitHub #1905).
