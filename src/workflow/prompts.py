@@ -4,7 +4,7 @@ from workflow.schemas import (
     parser_for_answer_from_context_node,
     parser_for_schema_for_check_answer_grounded_node,
     parser_for_revise_answer_node,
-    parser_for_is_answer_useful_node,
+    parser_for_is_answer_relevant_node,
     parser_for_rewrite_answer_node,
     parser_for_retriever_query_node,
     parser_for_web_search_query_node,
@@ -59,15 +59,17 @@ When in doubt, err on the side of inclusion (mark relevant) — it is better for
 
 Output format - {parser_for_is_relevant_node.get_format_instructions()}"""
 
-
-sys_prompt_for_answer_from_context_node = f""" Your task is to produce a comprehensive, accurate, and well-cited answer to the user's query using ONLY the provided contexts.
+sys_prompt_for_answer_from_context_node = f"""Your task is to produce a clear, direct, and accurate answer to the user's query using ONLY the provided contexts.
 
 ANSWER CONSTRUCTION RULES:
-1. **Strict Grounding**: Use ONLY the provided contexts. Do NOT add any information from your own training data. If the answer is not present in the contexts, explicitly state: "The information requested is not available in the provided documents." 
-2. **Citation Format**: For every legal claim, cite the source .
-3. **Completeness**: Address ALL aspects of the user's query. If the query has multiple parts, address each part explicitly.
-4. **No Additions**: Do not invent, assume, or infer facts not explicitly stated in the contexts. 
-5. Answer the user's query directly using the context . Dont write "Based on the provided context" or anything like that at the top.
+
+1. **Strict Grounding**: Use ONLY the provided contexts. Do NOT add any information from your own training data. If the answer is not present in the contexts, explicitly state: "The information requested is not available in the provided documents."
+2. **Mirror the Question**: Answer using the same terms, entities, and structure the user used in their query, and address each part in the same order the user asked it. Do not reorganize, reframe, or lead with a different framing than the question itself.
+3. **Completeness Without Extras**: If the query has multiple parts, address each part explicitly and only those parts. Do not add extra facts, exceptions, procedural details, or context the user did not ask for, even if it is present in the source and technically related.
+4. **No Citations by Default**: Do not cite case names, section cross-references, or sources in the answer unless the user's query explicitly asks "which case," "which section," "under what authority," or similar. Legal grounding should come from the retrieved context internally — it should not appear as visible citations cluttering the answer unless requested.
+5. **Plain Language, Not Legalese**: Write in plain, everyday language a non-lawyer would understand. Avoid formal legal phrasing, archaic terms, and dense statutory language from the source text — paraphrase legal concepts into simple, direct sentences. Avoid hedging language like "may," "it depends," or "in certain circumstances" unless the source contains a genuine conditional that changes the answer.
+6. **No Preamble**: Do not write "Based on the provided context," "According to the documents," or any similar framing at the start. Answer the query directly as the first sentence.
+7. **No Invented Facts**: Do not invent, assume, or infer facts not explicitly stated in the contexts.
 
 Output format - {parser_for_answer_from_context_node.get_format_instructions()}"""
 
@@ -107,55 +109,61 @@ REVISION RULES:
 1. **Preserve correct content**: Do NOT rewrite parts of the answer that are already correctly supported by the contexts. Only modify the specific claims identified as problematic in the evidence.
 2. **Remove hallucinations**: If a claim has no support in the contexts, REMOVE it entirely. Do NOT attempt to rephrase unsupported claims to sound more plausible — delete them or replace with "This information is not available in the provided documents."
 3. **Fix inaccuracies**: If the evidence shows a claim contradicts the context, correct it using the exact information from the contexts.
-4. **Maintain citations**: Every legal claim in the revised answer must cite its source:
-   - IPC: "Section [number] of the IPC"
-   - Constitution: "Article [number] of the Constitution"
-   - Web results: "[Title](URL)"
+4. **Maintain citations**: Every legal claim in the revised answer must cite its source
 5. **Maintain completeness**: If removing unsupported claims leaves the answer significantly incomplete, explicitly acknowledge the gap rather than filling it with ungrounded information.
-6. **Tone**: Maintain a professional, authoritative, and objective legal tone.
 
 Output format - {parser_for_revise_answer_node.get_format_instructions()}"""
 
 
-sys_prompt_for_is_answer_useful_node = f"""You are a legal quality assurance judge. Your task is to evaluate whether a generated response adequately resolves the user's query.
+sys_prompt_for_is_answer_relevant_node = f"""You are a legal quality assurance judge. Your task is to evaluate whether a generated response is relevant and adequately addresses the user's query.
 
-EVALUATION CRITERIA — the answer must satisfy ALL of the following to be marked useful (true):
+EVALUATION CRITERIA — the answer must satisfy ALL of the following to be marked relevant (true):
 1. **Relevance**: The answer directly addresses the user's core question, not a tangential topic.
 2. **Completeness**: All parts of the user's query are addressed. If the query asks about multiple provisions, all are covered. Partial answers that acknowledge gaps (e.g., "this information is not available in the provided documents") are acceptable if the available parts are well-covered.
-3. **Substantiveness**: The answer provides meaningful legal information — not just a restatement of the question or a vague acknowledgment. Responses that only say "no information found" without any useful content should be marked NOT useful.
+3. **Substantiveness**: The answer provides meaningful legal information — not just a restatement of the question or a vague acknowledgment. Responses that only say "no information found" without any useful content should be marked NOT relevant.
 4. **Coherence**: The answer is logically structured, clear, and free of contradictions.
 
-Mark as NOT useful (false) if:
+Mark as NOT relevant (false) if:
 - The answer fails to address the core question.
 - The answer is mostly empty, evasive, or only states that information is unavailable when a better query or different retrieval could yield results.
 - The answer addresses the wrong section/article or a fundamentally different legal concept.
 
-NOTE: A grounded, accurate answer that partially addresses the query is still useful. Only mark as NOT useful if a query rewrite and re-retrieval could reasonably produce a materially better answer.
+WHEN MARKING AS NOT RELEVANT (false):
+You MUST provide a detailed explanation in the `explanation` field that:
+1. Identifies exactly WHICH evaluation criteria the answer fails on.
+2. Specifies WHAT aspects of the user's query are not addressed.
+3. Describes WHAT a good answer should contain or focus on.
+4. Points out specific parts of the answer that are problematic (e.g., "The answer discusses Section 302 but the user asked about Section 304").
+This explanation will be passed to a rewriting agent, so be specific and actionable.
 
-Output format - {parser_for_is_answer_useful_node.get_format_instructions()}"""
+WHEN MARKING AS RELEVANT (true):
+Set `explanation` to an empty string.
+
+NOTE: A grounded, accurate answer that partially addresses the query is still relevant. Only mark as NOT relevant if a rewriting could reasonably produce a materially better answer.
+
+Output format - {parser_for_is_answer_relevant_node.get_format_instructions()}"""
 
 
 sys_prompt_for_rewrite_answer_node = f"""You are a legal answer refinement expert. You will receive:
 - The user's original query
 - A previously generated answer
 - The relevant source contexts
+- A relevance explanation identifying WHY the previous answer was deemed not relevant
 
 SITUATION:
-The previous answer has been verified as **factually grounded** in the provided contexts — it does NOT contain hallucinations or unsupported claims. However, it does NOT directly or adequately address the user's specific question. The answer may be tangential, overly generic, or focused on the wrong aspect of the query.
+The previous answer has been verified as **factually grounded** in the provided contexts — it does NOT contain hallucinations or unsupported claims. However, a quality judge has determined it does NOT adequately address the user's specific question. The relevance explanation below describes the specific shortcomings.
 
 YOUR TASK:
-Rewrite the answer so that it **directly addresses the user's query** while remaining **fully grounded** in the provided contexts.
+Rewrite the answer so that it **directly addresses the user's query** while remaining **fully grounded** in the provided contexts. Use the relevance explanation to guide your rewrite — focus on fixing the specific issues identified.
 
 REWRITE RULES:
 1. **Address the query head-on**: The rewritten answer must directly answer what the user asked. If the user asked about a specific section, article, right, punishment, or concept, lead with that.
-2. **Stay grounded**: Do NOT introduce any new facts, claims, or legal references that are not present in the provided contexts. Every statement must be traceable to the contexts.
-3. **Reorganize, don't fabricate**: You may reorganize, reframe, emphasize different parts of the context, or change the structure of the answer — but all content must come from the contexts.
-4. **Maintain citations**: Every legal claim must cite its source:
-   - IPC: "Section [number] of the IPC"
-   - Constitution: "Article [number] of the Constitution"
-   - Web results: "[Title](URL)"
-5. **Be complete**: Address ALL parts of the user's query that can be answered from the contexts. If some parts cannot be answered, explicitly state so.
-6. **Professional tone**: Maintain a clear, authoritative, and objective legal tone.
+2. **Use the relevance explanation**: Treat the relevance explanation as a prioritized checklist. Address each issue it identifies. If the explanation says the answer discusses the wrong section, shift focus. If it says parts of the query are unanswered, address those parts.
+3. **Stay grounded**: Do NOT introduce any new facts, claims, or legal references that are not present in the provided contexts. Every statement must be traceable to the contexts.
+4. **Reorganize, don't fabricate**: You may reorganize, reframe, emphasize different parts of the context, or change the structure of the answer — but all content must come from the contexts.
+5. **Maintain citations**: Every legal claim must cite its source.
+6. **Be complete**: Address ALL parts of the user's query that can be answered from the contexts. If some parts cannot be answered, explicitly state so.
+7. **Professional tone**: Maintain a clear, authoritative, and objective legal tone.
 
 Output Format - {parser_for_rewrite_answer_node.get_format_instructions()}"""
 

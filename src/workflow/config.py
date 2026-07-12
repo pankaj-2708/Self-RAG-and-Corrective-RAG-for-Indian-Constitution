@@ -60,13 +60,16 @@ grounding_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.0)
 
 
 # Rewrites answers to better address the user's query
-answer_rewrite_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.5)
+# R1's chain-of-thought reasoning produces better targeted rewrites
+answer_rewrite_model = ChatBedrockConverse(**_r1_kwargs, temperature=1)
 
-# Judges whether an answer is useful to the user
-judge_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.0)
+# Judges whether an answer is relevant to the user's query
+# R1's reasoning helps catch subtle relevance issues
+judge_model = ChatBedrockConverse(**_r1_kwargs, temperature=1)
 
 # Revises/improves an answer that failed grounding
-critic_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.5)
+# R1's chain-of-thought reasoning produces more accurate revisions
+critic_model = ChatBedrockConverse(**_r1_kwargs, temperature=1)
 
 # vector_store
 vector_store = Chroma(

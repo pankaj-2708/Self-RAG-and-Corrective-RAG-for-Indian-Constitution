@@ -77,13 +77,21 @@ def run_langgraph_rag(user_query, app, pbar=None):
     def _run():
         state_updates = {
             "relevant_contexts": [],
-            "generated_response": ""
+            "generated_response": "",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "is_answer_relevant": None,
+            "relevance_explanation": "",
+            "is_grounded": None,
+            "evidence": "",
+            "retrieval_method": None,
+            "web_searched": False
         }
         for chunk in app.stream({
             "user_query": user_query,
             "k": 2,
             "max_retry_for_groundness_checking": 1,
-            "max_retry_for_answer_useful_checking": 1,
+            "max_retry_for_answer_relevant_checking": 1,
             "input_tokens": 0,
             "output_tokens": 0
         }, stream_mode="updates"):
@@ -100,6 +108,33 @@ def run_langgraph_rag(user_query, app, pbar=None):
                         state_updates["relevant_contexts"].extend(rc)
                     else:
                         state_updates["relevant_contexts"].append(rc)
+                
+                # Accumulate tokens from each node
+                if node_state and "input_tokens" in node_state:
+                    state_updates["input_tokens"] += node_state["input_tokens"]
+                if node_state and "output_tokens" in node_state:
+                    state_updates["output_tokens"] += node_state["output_tokens"]
+                
+                # Capture retrieval method from retrieval_decider_node
+                if node_state and "retrieval_required" in node_state:
+                    state_updates["retrieval_method"] = node_state["retrieval_required"]
+                
+                # Capture grounding result (last value wins if node runs multiple times)
+                if node_state and "is_grounded" in node_state:
+                    state_updates["is_grounded"] = node_state["is_grounded"]
+                if node_state and "evidence" in node_state:
+                    state_updates["evidence"] = node_state["evidence"]
+                
+                # Capture answer relevance result (last value wins if node runs multiple times)
+                if node_state and "is_answer_relevant" in node_state:
+                    state_updates["is_answer_relevant"] = node_state["is_answer_relevant"]
+                if node_state and "relevance_explanation" in node_state:
+                    state_updates["relevance_explanation"] = node_state["relevance_explanation"]
+                
+                # Capture web_searched flag
+                if node_state and "web_searched" in node_state:
+                    state_updates["web_searched"] = node_state["web_searched"]
+
         return state_updates
 
     try:
@@ -112,7 +147,20 @@ def run_langgraph_rag(user_query, app, pbar=None):
     contexts_raw = res.get('relevant_contexts', [])
     contexts = [c.content if hasattr(c, 'content') else str(c) for c in contexts_raw]
     
-    return res.get('generated_response', ''), contexts
+    return (
+        res.get('generated_response', ''),
+        contexts,
+        {
+            "input_tokens": res.get("input_tokens", 0),
+            "output_tokens": res.get("output_tokens", 0),
+            "is_answer_relevant": res.get("is_answer_relevant"),
+            "relevance_explanation": res.get("relevance_explanation", ""),
+            "is_grounded": res.get("is_grounded"),
+            "evidence": res.get("evidence", ""),
+            "retrieval_method": res.get("retrieval_method"),
+            "web_searched": res.get("web_searched", False),
+        }
+    )
 
 # Check for existing progress file
 evaluation_data = []
@@ -124,25 +172,22 @@ if os.path.exists(progress_path):
         print(f"Loading progress from {progress_path}...")
         progress_df = pd.read_csv(progress_path)
         for _, row in progress_df.iterrows():
-            ctx_val = row["contexts"]
-            if isinstance(ctx_val, str):
-                try:
-                    contexts_list = json.loads(ctx_val)
-                except Exception:
-                    try:
-                        contexts_list = ast.literal_eval(ctx_val)
-                    except Exception:
-                        contexts_list = [ctx_val]
-            else:
-                contexts_list = list(ctx_val) if pd.notna(ctx_val) else []
-            
+            ctx_val = list(set(ast.literal_eval(row["contexts"])))
             evaluation_data.append({
                 "question": row["question"],
                 "answer": row["answer"],
-                "contexts": contexts_list,
+                "contexts": ctx_val,
                 "ground_truth": row["ground_truth"],
                 "reference_contexts": ast.literal_eval(row["reference_contexts"]),
-                "synthesizer": row.get("synthesizer", "")
+                "synthesizer": row.get("synthesizer", ""),
+                "input_tokens": row.get("input_tokens", 0),
+                "output_tokens": row.get("output_tokens", 0),
+                "is_answer_relevant": row.get("is_answer_relevant"),
+                "relevance_explanation": row.get("relevance_explanation", ""),
+                "is_grounded": row.get("is_grounded")=="fully_supported",
+                "evidence": row.get("evidence", ""),
+                "retrieval_method": row.get("retrieval_method"),
+                "web_searched": row.get("web_searched", False),
             })
             completed_questions.add(row["question"])
         print(f"Resuming run. {len(completed_questions)} items already completed.")
@@ -163,7 +208,7 @@ for _, row in pbar:
     ground_truth = row["reference"] 
     
     tqdm.write(f"Processing query: {question}")
-    answer, contexts = run_langgraph_rag(question, app, pbar)
+    answer, contexts, metadata = run_langgraph_rag(question, app, pbar)
     
     evaluation_data.append({
         "question": question,
@@ -171,7 +216,15 @@ for _, row in pbar:
         "contexts": contexts,     
         "reference_contexts":ast.literal_eval(row['reference_contexts']),
         "ground_truth": ground_truth,
-        "synthesizer": row["synthesizer_name"]
+        "synthesizer": row["synthesizer_name"],
+        "input_tokens": metadata["input_tokens"],
+        "output_tokens": metadata["output_tokens"],
+        "is_answer_relevant": metadata["is_answer_relevant"],
+        "relevance_explanation": metadata["relevance_explanation"],
+        "is_grounded": metadata["is_grounded"],
+        "evidence": metadata["evidence"],
+        "retrieval_method": metadata["retrieval_method"],
+        "web_searched": metadata["web_searched"],
     })
     completed_questions.add(question)
     

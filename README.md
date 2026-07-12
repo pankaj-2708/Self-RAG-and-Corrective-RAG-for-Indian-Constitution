@@ -1,148 +1,328 @@
-# Self-RAG & Corrective RAG System for the Indian Constitution & IPC
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white" />
+  <img src="https://img.shields.io/badge/LangGraph-Agentic_Workflow-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white" />
+  <img src="https://img.shields.io/badge/DeepSeek_R1_&_V3-AWS_Bedrock-FF9900?style=for-the-badge&logo=amazonwebservices&logoColor=white" />
+  <img src="https://img.shields.io/badge/ChromaDB-Vector_Store-00AA6C?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Ragas-Evaluation-EF4444?style=for-the-badge" />
+</p>
 
-An advanced, agentic Retrieval-Augmented Generation (RAG) system utilizing **LangGraph** to implement Self-RAG and Corrective RAG (CRAG) patterns. It provides highly reliable question-answering over the **Constitution of India** and the **Indian Penal Code (IPC)**.
+<h1 align="center">Self-RAG & Corrective RAG for the Indian Constitution & IPC</h1>
 
-The system dynamically decides between internal database retrieval, web search fallback, and direct generation, incorporating validation checks for context relevance, answer grounding, and utility to rewrite queries and self-correct when necessary.
+<p align="center">
+  <em>An agentic, self-correcting Retrieval-Augmented Generation system that delivers reliable, grounded answers on Indian law — powered by LangGraph, DeepSeek R1/V3, and multi-stage validation.</em>
+</p>
 
 ---
 
-## 🗺️ Workflow Architecture
+## Overview
 
-Below is the complete state machine representing the LangGraph workflow:
+This project implements an advanced **Self-RAG** and **Corrective RAG (CRAG)** pipeline using **LangGraph** to provide question-answering over the **Constitution of India** and the **Indian Penal Code (IPC)**.
+
+Unlike vanilla RAG, this system **self-evaluates and self-corrects** at every stage:
+
+- **Routes intelligently** — decides between vector retrieval, web search, or direct generation per query.
+- **Validates retrieved context** — filters irrelevant chunks via parallel Map-Reduce relevance scoring.
+- **Checks grounding** — verifies the generated answer is supported by evidence.
+- **Self-corrects** — rewrites or revises answers that fail grounding or relevance checks.
+- **Falls back to web search** — automatically searches the web when local retrieval fails.
+
+---
+
+## Key Features
+
+| Feature | Description |
+|---|---|
+| **Intelligent Query Routing** | DeepSeek R1 chain-of-thought reasoning classifies queries into `retrieval`, `web_search`, or `direct_generation` paths |
+| **Parallel Multi-Query Retrieval** | Generates optimized sub-queries and fans out parallel vector searches via LangGraph's `Send` API |
+| **Parallel Relevance Filtering** | Map-Reduce pattern scores each retrieved chunk independently, then aggregates to filter noise |
+| **Web Search Fallback** | Tavily Search API provides real-time web context when local retrieval finds no relevant results |
+| **Hallucination Guard** | Grounding checker verifies every answer against source evidence; ungrounded answers are revised by a critic model |
+| **Answer Relevance Loop** | A judge model evaluates if the final answer actually addresses the user's query; irrelevant answers are rewritten |
+| **Conversational Memory** | SQLite-backed state checkpointing preserves chat history across sessions |
+| **Observability** | Arize Phoenix integration provides full tracing of every LLM call, retrieval, and decision |
+| **Automated Evaluation** | End-to-end Ragas evaluation pipeline with faithfulness, answer relevancy, context precision, and context recall |
+
+---
+
+## Workflow Architecture
+
+The LangGraph state machine orchestrating the entire pipeline:
 
 ```mermaid
 ---
 config:
+  theme: dark
   flowchart:
     curve: linear
+    nodeSpacing: 40
+    rankSpacing: 60
 ---
-graph TD;
-	__start__([<p>__start__</p>]):::first
-	retrieval_decider_node(retrieval_decider_node)
-	generate_retriever_query_node(generate_retriever_query_node)
-	retrieve_node(retrieve_node)
-	direct_generation_node(direct_generation_node)
-	is_relevant_node(is_relevant_node)
-	answer_from_context_node(answer_from_context_node)
-	check_answer_grounded_node(check_answer_grounded_node)
-	revise_answer_node(revise_answer_node)
-	is_answer_useful_node(is_answer_useful_node)
-	rewrite_answer_node(rewrite_answer_node)
-	generate_web_search_query_node(generate_web_search_query_node)
-	web_search_node(web_search_node)
-	aggregate_retrieval(aggregate_retrieval)
-	aggregate_relevance(aggregate_relevance)
-	__end__([<p>__end__</p>]):::last
-	__start__ --> retrieval_decider_node;
-	aggregate_relevance -. &nbsp;True&nbsp; .-> answer_from_context_node;
-	aggregate_relevance -. &nbsp;False&nbsp; .-> generate_web_search_query_node;
-	aggregate_retrieval -.-> is_relevant_node;
-	answer_from_context_node --> check_answer_grounded_node;
-	check_answer_grounded_node -. &nbsp;True&nbsp; .-> is_answer_useful_node;
-	check_answer_grounded_node -. &nbsp;False&nbsp; .-> revise_answer_node;
-	generate_retriever_query_node -.-> retrieve_node;
-	generate_web_search_query_node --> web_search_node;
-	is_answer_useful_node -. &nbsp;True&nbsp; .-> __end__;
-	is_answer_useful_node -. &nbsp;False&nbsp; .-> rewrite_answer_node;
-	is_relevant_node --> aggregate_relevance;
-	retrieval_decider_node -. &nbsp;None&nbsp; .-> direct_generation_node;
-	retrieval_decider_node -. &nbsp;retrieval&nbsp; .-> generate_retriever_query_node;
-	retrieval_decider_node -. &nbsp;web_search&nbsp; .-> generate_web_search_query_node;
-	retrieve_node --> aggregate_retrieval;
-	revise_answer_node --> check_answer_grounded_node;
-	rewrite_answer_node --> is_answer_useful_node;
-	web_search_node --> answer_from_context_node;
-	direct_generation_node --> __end__;
-	classDef default fill:#f2f0ff,line-height:1.2
-	classDef first fill-opacity:0
-	classDef last fill:#bfb6fc
+graph TD
+    __start__([" __start__ "]):::startNode
+    retrieval_decider_node["Retrieval Decider"]:::routingNode
+    generate_retriever_query_node["Generate Retriever Queries"]:::retrievalNode
+    retrieve_node["Retrieve - Parallel"]:::retrievalNode
+    aggregate_retrieval["Aggregate Retrieval"]:::retrievalNode
+    direct_generation_node["Direct Generation"]:::generationNode
+    is_relevant_node["Relevance Check - Parallel"]:::validationNode
+    aggregate_relevance["Aggregate Relevance"]:::validationNode
+    answer_from_context_node["Generate Answer from Context"]:::generationNode
+    check_answer_grounded_node["Grounding Check"]:::validationNode
+    revise_answer_node["Revise Answer"]:::correctionNode
+    is_answer_useful_node["Answer Relevance Check"]:::validationNode
+    rewrite_answer_node["Rewrite Answer"]:::correctionNode
+    generate_web_search_query_node["Generate Web Query"]:::webNode
+    web_search_node["Web Search"]:::webNode
+    __end__([" __end__ "]):::endNode
+
+    __start__ --> retrieval_decider_node
+
+    retrieval_decider_node -. " retrieval " .-> generate_retriever_query_node
+    retrieval_decider_node -. " web_search " .-> generate_web_search_query_node
+    retrieval_decider_node -. " None " .-> direct_generation_node
+
+    generate_retriever_query_node -.-> retrieve_node
+    retrieve_node --> aggregate_retrieval
+    aggregate_retrieval -.-> is_relevant_node
+    is_relevant_node --> aggregate_relevance
+
+    aggregate_relevance -. " Relevant " .-> answer_from_context_node
+    aggregate_relevance -. " Not Relevant " .-> generate_web_search_query_node
+
+    generate_web_search_query_node --> web_search_node
+    web_search_node --> answer_from_context_node
+
+    answer_from_context_node --> check_answer_grounded_node
+
+    check_answer_grounded_node -. " Grounded " .-> is_answer_useful_node
+    check_answer_grounded_node -. " Not Grounded " .-> revise_answer_node
+    revise_answer_node --> check_answer_grounded_node
+
+    is_answer_useful_node -. " Relevant " .-> __end__
+    is_answer_useful_node -. " Not Relevant " .-> rewrite_answer_node
+    rewrite_answer_node --> is_answer_useful_node
+
+    direct_generation_node --> __end__
+
+    classDef startNode fill:#1a1a2e,stroke:#00d4aa,stroke-width:2px,color:#00d4aa
+    classDef endNode fill:#1a1a2e,stroke:#00d4aa,stroke-width:2px,color:#00d4aa
+    classDef routingNode fill:#2d1b69,stroke:#a78bfa,stroke-width:2px,color:#e0d4ff
+    classDef retrievalNode fill:#1e3a5f,stroke:#60a5fa,stroke-width:2px,color:#dbeafe
+    classDef generationNode fill:#1a4731,stroke:#34d399,stroke-width:2px,color:#d1fae5
+    classDef validationNode fill:#713f12,stroke:#fbbf24,stroke-width:2px,color:#fef3c7
+    classDef correctionNode fill:#7f1d1d,stroke:#f87171,stroke-width:2px,color:#fee2e2
+    classDef webNode fill:#164e63,stroke:#22d3ee,stroke-width:2px,color:#cffafe
+```
+
+**Legend**
+
+| Colour | Stage |
+|---|---|
+| Purple | Query Routing |
+| Blue | Vector Retrieval |
+| Green | Answer Generation |
+| Yellow | Validation & Checks |
+| Red | Self-Correction |
+| Cyan | Web Search Fallback |
+
+---
+
+## Demo
+
+<!-- ┌──────────────────────────────────────────────────────────────────┐ -->
+<!-- │  ADD YOUR PROJECT SCREENSHOT BELOW                              │ -->
+<!-- │  Replace the empty src with your actual screenshot path.        │ -->
+<!-- │  Example: src="assets/demo_screenshot.png"                      │ -->
+<!-- └──────────────────────────────────────────────────────────────────┘ -->
+
+<p align="center">
+  <img src="" alt="Project Demo Screenshot" width="85%" />
+  <br />
+  <em>Screenshot of the interactive CLI in action — add your screenshot here.</em>
+</p>
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Orchestration** | [LangGraph](https://github.com/langchain-ai/langgraph) — agentic state machine with parallel fan-out |
+| **LLMs** | [DeepSeek R1](https://deepseek.com/) (reasoning) & [DeepSeek V3](https://deepseek.com/) (generation) via AWS Bedrock |
+| **Embeddings** | [sentence-transformers/all-mpnet-base-v2](https://huggingface.co/sentence-transformers/all-mpnet-base-v2) |
+| **Vector Store** | [ChromaDB](https://www.trychroma.com/) — persistent local vector database |
+| **Web Search** | [Tavily Search API](https://tavily.com/) — real-time web search fallback |
+| **Observability** | [Arize Phoenix](https://phoenix.arize.com/) — LLM tracing & monitoring |
+| **Evaluation** | [Ragas](https://docs.ragas.io/) — faithfulness, relevancy, context recall & precision |
+| **CLI** | [Rich](https://github.com/Textualize/rich) — beautiful terminal interface with streaming |
+| **Package Manager** | [uv](https://github.com/astral-sh/uv) — fast Python package management |
+
+---
+
+## Project Structure
+
+```
+constitution_rag/
+├── src/
+│   ├── cli.py                          # Interactive terminal interface (Rich-based)
+│   ├── create_vector_store.py          # Data ingestion → ChromaDB
+│   ├── workflow/
+│   │   ├── __init__.py                 # Graph construction & compilation
+│   │   ├── state.py                    # TypedDict state schema with reducers
+│   │   ├── nodes.py                    # All node implementations (13 nodes)
+│   │   ├── edges.py                    # Conditional edge routing logic
+│   │   ├── config.py                   # LLM clients, vector store, search tools
+│   │   ├── prompts.py                  # System prompts for every node
+│   │   └── schemas.py                  # Pydantic schemas for structured output
+│   └── evaluation/
+│       ├── evaluate.py                 # End-to-end Ragas evaluation pipeline
+│       ├── test_set_generation.py      # Synthetic test set generator
+│       ├── clustering.py               # K-means clustering for test diversity
+│       └── knowledge_graph.py          # Knowledge graph construction
+├── data/
+│   ├── articles.json                   # Constitution of India articles
+│   ├── penal_code_sections.json        # IPC sections
+│   ├── constitution_and_ipc.chroma/    # Persisted ChromaDB vector store
+│   └── test_set.csv                    # Evaluation test set
+├── notebooks/
+│   ├── data_collector.ipynb            # Web scraping & data preparation
+│   ├── srag.ipynb                      # Self-RAG prototyping & experiments
+│   ├── ragas.ipynb                     # Ragas evaluation experiments
+│   └── ragas_results.ipynb             # Evaluation results analysis
+├── pyproject.toml                      # Project config & dependencies
+├── .env                                # API keys (not committed)
+└── README.md
 ```
 
 ---
 
-## 🚀 Key Features
+## Getting Started
 
-1. **Intelligent Query Routing (`retrieval_decider_node`)**: Evaluates if the query is a general knowledge question (`None`), requires constitutional/IPC lookup (`retrieval`), or concerns recent happenings/un-indexed details (`web_search`).
-2. **Parallel Multi-Query Retrieval (`generate_retriever_query_node`, `fanout_retrieve_node` & `retrieve_node`)**: Generates optimized search queries and executes parallel vector searches for comprehensive context fetching.
-3. **Parallel Relevance Verification (`fanout_relevant_node` & `is_relevant_node`)**: Distributes retrieved documents in parallel (Map step) to score and filter irrelevant content, and combines them (Reduce step) to clean up noise.
-4. **Web Search Fallback (`web_search_node`)**: Integrates the Tavily Search API as a backup when local retrieval fails to find relevant context.
-5. **Hallucination & Grounding Check (`check_answer_grounded_node`)**: Grades the synthesized answer against the retrieved evidence. If the answer is ungrounded, it invokes `revise_answer_node` to regenerate using a critic model.
-6. **Answer Refinement (`rewrite_answer_node`)**: If the final response is judged non-useful (in `is_answer_useful_node`), it rewrites the generated answer directly based on context and evaluates its utility again.
-7. **Thread-Based Memory (`SqliteSaver`)**: Persists chat history across sessions using SQLite state checkpointers.
+### Prerequisites
 
----
+- **Python 3.12+**
+- [uv](https://github.com/astral-sh/uv) (recommended) or pip
+- API keys for: **AWS Bedrock** (DeepSeek models), **Tavily Search**, **LangSmith** (optional)
 
-## 📁 Repository Structure
+### 1. Clone the Repository
 
-*   **`src/workflow/`**: The core graph package.
-    *   `__init__.py`: Combines state, nodes, and conditional edges into the compiled `StateGraph`.
-    *   `state.py`: Defines the `schema` (TypedDict) that maintains the shared workflow variables.
-    *   `nodes.py`: Houses logic for all graph states, invoking the underlying LLMs, Tavily tools, and vector stores.
-    *   `edges.py`: Logic for conditional routing (decider route, relevance, grounding, and utility).
-    *   `config.py`: Loads credentials and defines model components (using Ollama and HuggingFace).
-    *   `prompts.py`: Holds system instructions for evaluation, generation, revision, and rewriting.
-    *   `schemas.py`: Implements Pydantic parser schemas for structured JSON output.
-*   **`src/create_vector_store.py`**: Ingestion script that parses raw article and section files and saves them as a Chroma database.
-*   **`src/cli.py`**: Interactive terminal shell utilizing `rich` for pretty printing and real-time step streaming.
-*   **`data/`**: Directory containing raw JSON datasets and Chroma database files.
-
----
-
-## 🛠️ Setup & Installation
-
-### 1. Prerequisites
-- Python 3.12 or higher.
-- [uv](https://github.com/astral-sh/uv) (recommended) or `pip` for managing dependencies.
+```bash
+git clone https://github.com/pankaj-2708/Self-RAG-on-Indian-Constitution.git
+cd Self-RAG-on-Indian-Constitution
+```
 
 ### 2. Install Dependencies
-Run the following command in the project root:
+
 ```bash
 uv sync
 ```
-*Or using traditional pip:*
-```bash
-pip install -r pyproject.toml
-```
 
-### 3. Environment Variables
-Create a `.env` file in the root directory (or update the existing one) with your API keys:
+<details>
+<summary>Alternative: using pip</summary>
+
+```bash
+pip install -e .
+```
+</details>
+
+### 3. Configure Environment Variables
+
+Create a `.env` file in the project root:
+
 ```env
+# AWS Bedrock (required)
+AWS_BEARER_TOKEN_BEDROCK="your-aws-bearer-token"
+
+# Web Search (required for fallback)
+TAVILY_API_KEY="your-tavily-api-key"
+
+# Observability (optional)
 LANGSMITH_TRACING_V2="true"
 LANGSMITH_ENDPOINT="https://api.smith.langchain.com"
 LANGSMITH_API_KEY="your-langsmith-api-key"
 LANGSMITH_PROJECT="constitution"
-TAVILY_API_KEY="your-tavily-api-key"
-OLLAMA_API_KEY="your-ollama-api-key"
 ```
 
-### 4. Create the Vector Store
-To ingest the Indian Constitution and Penal Code data into the local Chroma vector store:
+### 4. Build the Vector Store
+
 ```bash
 python src/create_vector_store.py
 ```
-*(This parses raw inputs from `data/articles.json` and `data/penal_code_sections.json` and compiles them under `data/constitution_and_ipc.chroma`).*
 
----
+> This parses `data/articles.json` and `data/penal_code_sections.json` and persists embeddings into `data/constitution_and_ipc.chroma/`.
 
-## 💬 Usage
+### 5. Launch the CLI
 
-Launch the interactive console with the CLI script:
 ```bash
 python src/cli.py
 ```
 
-### Special Commands inside CLI:
-- `/new`: Resets the chat history and spawns a new conversation thread.
-- `exit`: Shuts down the interactive loop.
+| Command | Action |
+|---|---|
+| `/new` | Start a new conversation thread |
+| `exit` | Quit the CLI |
 
 ---
 
-## 📊 Evaluation Notes
+## Evaluation
 
-### Why `context_precision` was excluded from this evaluation
+The system is evaluated using [Ragas](https://docs.ragas.io/) across four metrics:
 
-Ragas's LLM-based `context_precision` metric evaluates each retrieved chunk independently against the full generated answer, not against the question or against the combined set of retrieved chunks. The metric's own judge prompt is: "Given question, answer and context verify if the context was useful in arriving at the given answer" (ragas source, `_context_precision.py`).
+| Metric | What it measures |
+|---|---|
+| **Faithfulness** | Is the answer factually consistent with the retrieved context? |
+| **Answer Relevancy** | Does the answer address the user's question? |
+| **Context Precision** | Are the retrieved documents relevant to the question? (Non-LLM, reference-based) |
+| **Context Recall** | Were all necessary reference documents retrieved? |
 
-This design breaks down for multi-hop questions in our dataset — e.g. questions that require synthesizing two separate Constitution articles into one answer. Even when the retriever pulls exactly the correct two articles and nothing else, the metric checks each article in isolation against the full two-part answer. Since neither article alone supports the whole answer, the judge LLM returns a verdict of 0 for both, producing a `context_precision` score of 0 despite perfect retrieval.
+Run the evaluation suite:
 
-This isn't unique to our setup — it's a documented characteristic of the metric. Other users have hit the same failure pattern, e.g. one case where `context_recall` was 1.0 (all needed info was retrieved) while `context_precision` was 0.0 for the same retrieval (Ragas GitHub #308), and others have questioned why the metric compares chunks against the answer rather than the question (Ragas GitHub #1905).
+```bash
+python src/evaluation/evaluate.py
+```
+
+> Results are versioned and saved to `data/evaluation_progress_results/`. The pipeline supports **resumable runs** — if interrupted, it picks up where it left off.
+
+<details>
+<summary><strong>Why <code>context_precision</code> uses a non-LLM variant</strong></summary>
+
+Ragas's LLM-based `context_precision` evaluates each chunk independently against the full generated answer. For multi-hop questions (e.g., synthesizing two Constitution articles), this produces false negatives — neither article alone supports the combined answer, yielding a score of 0 despite perfect retrieval. We use `NonLLMContextPrecisionWithReference` instead, which compares against reference contexts directly. This is a [documented limitation](https://github.com/explodinggradients/ragas/issues/308) of the original metric.
+
+</details>
+
+---
+
+## How It Works
+
+1. **Query Routing** — DeepSeek R1 classifies the user's question as requiring `retrieval` (vector DB), `web_search`, or `direct_generation`.
+
+2. **Multi-Query Generation** — For retrieval queries, the system generates up to 3 optimized sub-queries with optional metadata filters (Article/Section numbers).
+
+3. **Parallel Retrieval** — Each sub-query triggers a parallel vector search via LangGraph's `Send` API (fan-out pattern).
+
+4. **Parallel Relevance Scoring** — Every retrieved chunk is independently scored for relevance to the query (Map step), then results are aggregated (Reduce step). Irrelevant chunks are discarded.
+
+5. **Web Search Fallback** — If no relevant context survives filtering, the system automatically generates web search queries and fetches results from Tavily.
+
+6. **Answer Generation** — DeepSeek R1 synthesizes an answer from the validated context, leveraging chain-of-thought reasoning.
+
+7. **Grounding Verification** — A grounding model checks if the answer is supported by the source evidence. Ungrounded answers are revised by a critic model.
+
+8. **Relevance Validation** — A judge model assesses whether the answer actually addresses the user's question. Irrelevant answers are rewritten with explicit reference to the relevance gap.
+
+9. **Response Delivery** — The validated, grounded, relevant answer is returned to the user.
+
+---
+
+## Acknowledgements
+
+- [LangChain](https://github.com/langchain-ai/langchain) & [LangGraph](https://github.com/langchain-ai/langgraph) for the agentic orchestration framework
+- [DeepSeek](https://deepseek.com/) for the R1 reasoning and V3 generation models
+- [Ragas](https://docs.ragas.io/) for the evaluation framework
+- [Arize Phoenix](https://phoenix.arize.com/) for observability tooling
+
+---
+
+<p align="center">
+  <sub>Built with care for advancing legal AI in India</sub>
+</p>

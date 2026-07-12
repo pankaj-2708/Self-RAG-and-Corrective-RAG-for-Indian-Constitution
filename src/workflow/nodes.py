@@ -13,7 +13,7 @@ from workflow.schemas import (
     parser_for_schema_for_check_answer_grounded_node,
     parser_for_revise_answer_node,
     parser_for_revise_answer_node,
-    parser_for_is_answer_useful_node,
+    parser_for_is_answer_relevant_node,
     parser_for_rewrite_answer_node,
     parser_for_retriever_query_node,
     parser_for_web_search_query_node
@@ -24,7 +24,7 @@ from workflow.prompts import (
     sys_prompt_for_answer_from_context_node,
     sys_prompt_for_check_answer_grounded_node,
     sys_prompt_for_revise_answer_node,
-    sys_prompt_for_is_answer_useful_node,
+    sys_prompt_for_is_answer_relevant_node,
     sys_prompt_for_rewrite_answer_node,
     sys_prompt_for_retriever_query_node,
     sys_prompt_for_web_search_query_node
@@ -140,6 +140,7 @@ def aggregate_retrieval(state: schema):
     relevance evaluation begins."""
 
     return {}
+    
 
 def direct_generation_node(state: schema):
     response = generation_model.invoke(state["user_query"])
@@ -186,10 +187,8 @@ def is_relevant_node(inp):
     return out
 
 def aggregate_relevance(state):
-    # removing duplicates and capping maximum no of relevent contexts
-    state['relevant_contexts']=list(set(state['relevant_contexts']))
-    state['relevant_contexts']=state['relevant_contexts'][:5]
-    return state
+    # Deduplication is now handled by the custom state reducer.
+    return {}
 
 def answer_from_context_node(state: schema):
     contexts = state["relevant_contexts"]
@@ -219,6 +218,15 @@ def answer_from_context_node(state: schema):
     }
 
 def check_answer_grounded_node(state: schema):
+
+    if state['max_retry_for_groundness_checking'] <= 0:
+        return {
+            # because max_retry_for_groundness_checking =0 so even if answer is not grounded we are not going to modify it so there is no sense of checking here
+            "is_grounded": True,
+            "evidence": "",
+            "input_tokens": 0,
+            "output_tokens": 0
+        }
     contexts = state["relevant_contexts"]
     sys_prompt = SystemMessage(content=sys_prompt_for_check_answer_grounded_node)
     context = ""
@@ -244,6 +252,13 @@ def check_answer_grounded_node(state: schema):
     }
 
 def revise_answer_node(state: schema):
+    if state['max_retry_for_answer_relevant_checking'] <= 0:
+        return {
+            # because max_retry_for_answer_relevant_checking =0 so even if answer is not relevant we are not going to modify it so there is no sense of checking here
+            "generated_response": state["generated_response"],
+            "input_tokens": 0,
+            "output_tokens": 0
+        }
     contexts = state["relevant_contexts"]
     context = ""
     for i in contexts:
@@ -261,8 +276,10 @@ def revise_answer_node(state: schema):
 
     response = critic_model.invoke([sys_prompt, human_pr])
     usage = response.usage_metadata or {}
+    # R1 via Bedrock returns content as a list of dicts — extract only the 'text' block
+    content = _extract_r1_text(response.content)
     revised_answer = parser_for_revise_answer_node.invoke(
-        response.content
+        content
     )
 
     return {
@@ -272,22 +289,23 @@ def revise_answer_node(state: schema):
         "output_tokens": usage.get("output_tokens", 0)
     }
 
-def is_answer_useful_node(state: schema):
+def is_answer_relevant_node(state: schema):
     user_query = state["user_query"]
     generated_response = state["generated_response"]
 
-    sys_prompt = SystemMessage(content=sys_prompt_for_is_answer_useful_node)
+    sys_prompt = SystemMessage(content=sys_prompt_for_is_answer_relevant_node)
     human_pr = HumanMessage(
         content=f"Query - {user_query} \n\n Generated Response - {generated_response}"
     )
 
     response = judge_model.invoke([sys_prompt, human_pr])
     usage = response.usage_metadata or {}
-    res = parser_for_is_answer_useful_node.invoke(
-        response.content
-    )
+    # R1 via Bedrock returns content as a list of dicts — extract only the 'text' block
+    content = _extract_r1_text(response.content)
+    res = parser_for_is_answer_relevant_node.invoke(content)
     return {
-        "is_answer_useful": res.is_useful,
+        "is_answer_relevant": res.is_relevant,
+        "relevance_explanation": res.explanation,
         "input_tokens": usage.get("input_tokens", 0),
         "output_tokens": usage.get("output_tokens", 0)
     }
@@ -301,20 +319,21 @@ def rewrite_answer_node(state: schema):
 
     generated_response = state["generated_response"]
     user_query = state["user_query"]
+    relevance_explanation = state.get("relevance_explanation", "")
 
     sys_prompt = SystemMessage(content=sys_prompt_for_rewrite_answer_node)
     human_pr = HumanMessage(
-        content=f"""Query - {user_query} \n\n Previous Answer - {generated_response} \n\n Contexts - {context}"""
+        content=f"""Query - {user_query} \n\n Previous Answer - {generated_response} \n\n Contexts - {context} \n\n Relevance Explanation - {relevance_explanation}"""
     )
 
     response = answer_rewrite_model.invoke([sys_prompt, human_pr])
     usage = response.usage_metadata or {}
-    res = parser_for_rewrite_answer_node.invoke(
-        response.content
-    )
+    # R1 via Bedrock returns content as a list of dicts — extract only the 'text' block
+    content = _extract_r1_text(response.content)
+    res = parser_for_rewrite_answer_node.invoke(content)
     return {
         "generated_response": res.rewritten_response,
-        "max_retry_for_answer_useful_checking": state["max_retry_for_answer_useful_checking"] - 1,
+        "max_retry_for_answer_relevant_checking": state["max_retry_for_answer_relevant_checking"] - 1,
         "input_tokens": usage.get("input_tokens", 0),
         "output_tokens": usage.get("output_tokens", 0)
     }

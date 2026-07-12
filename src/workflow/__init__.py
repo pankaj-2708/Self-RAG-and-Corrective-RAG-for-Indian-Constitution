@@ -7,13 +7,13 @@ from workflow.state import schema
 from workflow.nodes import (
     retrieval_decider_node, retrieve_node, direct_generation_node,
     is_relevant_node, answer_from_context_node, check_answer_grounded_node,
-    revise_answer_node, is_answer_useful_node, rewrite_answer_node, web_search_node,
+    revise_answer_node, is_answer_relevant_node, rewrite_answer_node, web_search_node,
     generate_retriever_query_node, generate_web_search_query_node, fanout_relevant_node, aggregate_relevance,
     fanout_retrieve_node, aggregate_retrieval
 )
 from workflow.edges import (
     retrieval_decider_condition, is_relevant_condition,
-    is_grounded_condition, is_answer_useful_condition
+    is_grounded_condition, is_answer_relevant_condition
 )
 
 from phoenix.otel import register
@@ -35,7 +35,7 @@ graph.add_node("is_relevant_node", is_relevant_node)
 graph.add_node("answer_from_context_node", answer_from_context_node)
 graph.add_node("check_answer_grounded_node", check_answer_grounded_node)
 graph.add_node("revise_answer_node", revise_answer_node)
-graph.add_node("is_answer_useful_node", is_answer_useful_node)
+graph.add_node("is_answer_relevant_node", is_answer_relevant_node)
 graph.add_node("rewrite_answer_node", rewrite_answer_node)
 graph.add_node("generate_web_search_query_node", generate_web_search_query_node)
 graph.add_node("web_search_node", web_search_node)
@@ -76,15 +76,15 @@ graph.add_edge("answer_from_context_node", "check_answer_grounded_node")
 graph.add_conditional_edges(
     "check_answer_grounded_node",
     is_grounded_condition,
-    {True: "is_answer_useful_node", False: "revise_answer_node"},
+    {True: "is_answer_relevant_node", False: "revise_answer_node"},
 )
 graph.add_edge("revise_answer_node", "check_answer_grounded_node")
 graph.add_conditional_edges(
-    "is_answer_useful_node",
-    is_answer_useful_condition,
+    "is_answer_relevant_node",
+    is_answer_relevant_condition,
     {True: END, False: "rewrite_answer_node"},
 )
-graph.add_edge("rewrite_answer_node", "is_answer_useful_node")
+graph.add_edge("rewrite_answer_node", "is_answer_relevant_node")
 
 workflow = graph.compile(checkpointer=ck_ptr)
 

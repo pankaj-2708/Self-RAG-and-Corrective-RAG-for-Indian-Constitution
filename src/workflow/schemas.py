@@ -40,13 +40,17 @@ parser_for_revise_answer_node = PydanticOutputParser(
     pydantic_object=schema_for_revise_answer_node
 )
 
-class schema_for_is_answer_useful_node(BaseModel):
-    is_useful: bool = Field(
-        ..., description="Boolean response whether answer is useful or not"
+class schema_for_is_answer_relevant_node(BaseModel):
+    is_relevant: bool = Field(
+        ..., description="Boolean indicating whether the answer is relevant to the user's query"
+    )
+    explanation: str = Field(
+        default="",
+        description="When is_relevant is false, a detailed explanation of why the answer is not relevant and what specific aspects need improvement. Empty when is_relevant is true."
     )
 
-parser_for_is_answer_useful_node = PydanticOutputParser(
-    pydantic_object=schema_for_is_answer_useful_node
+parser_for_is_answer_relevant_node = PydanticOutputParser(
+    pydantic_object=schema_for_is_answer_relevant_node
 )
 
 class schema_for_rewrite_answer_node(BaseModel):

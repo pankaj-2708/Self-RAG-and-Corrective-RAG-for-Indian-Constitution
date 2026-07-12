@@ -45,9 +45,11 @@ if __name__ == "__main__":
             "user_query": human,
             "k": 2,
             "max_retry_for_groundness_checking": 1,
-            "max_retry_for_rewrite_query": 1,
+            "max_retry_for_answer_relevant_checking": 1,
             "input_tokens": 0,
             "output_tokens": 0,
+            "retrieved_contexts":[],
+            "relevant_contexts":[]
         }
 
         start_time = time.time()
