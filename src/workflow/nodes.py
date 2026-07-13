@@ -222,8 +222,8 @@ def check_answer_grounded_node(state: schema):
     if state['max_retry_for_groundness_checking'] <= 0:
         return {
             # because max_retry_for_groundness_checking =0 so even if answer is not grounded we are not going to modify it so there is no sense of checking here
-            "is_grounded": True,
-            "evidence": "",
+            "is_grounded": "fully_supported",
+            "evidence": "max_retries_exhausted",
             "input_tokens": 0,
             "output_tokens": 0
         }
@@ -290,6 +290,14 @@ def revise_answer_node(state: schema):
     }
 
 def is_answer_relevant_node(state: schema):
+    if state['max_retry_for_answer_relevant_checking'] <= 0:
+        return {
+            # because max_retry_for_answer_relevant_checking =0 so even if answer is not relevant we are not going to modify it so there is no sense of checking here
+            "is_answer_relevant": True,
+            "relevance_explanation": "max_retries_exhausted",
+            "input_tokens": 0,
+            "output_tokens": 0
+        }
     user_query = state["user_query"]
     generated_response = state["generated_response"]
 

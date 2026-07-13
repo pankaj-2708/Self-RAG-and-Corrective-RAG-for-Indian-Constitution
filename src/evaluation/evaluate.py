@@ -34,17 +34,17 @@ import re
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../data"))
-test_set_path = os.path.join(DATA_DIR, "test_set.csv")
+test_set_path = os.path.join(DATA_DIR, "sample_test_set.csv")
 
 RESULTS_DIR = os.path.join(DATA_DIR, "evaluation_progress_results")
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
-progress_path = os.path.join(RESULTS_DIR, "evaluation_progress2.csv")
-history_path = os.path.join(RESULTS_DIR, "evaluation_history2.csv")
-all_results_path = os.path.join(RESULTS_DIR, "all_results2.csv")
+progress_path = os.path.join(RESULTS_DIR, "sample_evaluation_progress2.csv")
+history_path = os.path.join(RESULTS_DIR, "sample_evaluation_history2.csv")
+all_results_path = os.path.join(RESULTS_DIR, "sample_all_results2.csv")
 
 # Determine next version
-existing_files = glob.glob(os.path.join(RESULTS_DIR, "results_v*.csv"))
+existing_files = glob.glob(os.path.join(RESULTS_DIR, "sample_results_v*.csv"))
 versions = []
 for f in existing_files:
     match = re.search(r'results_v(\d+)\.csv$', os.path.basename(f))
@@ -184,7 +184,7 @@ if os.path.exists(progress_path):
                 "output_tokens": row.get("output_tokens", 0),
                 "is_answer_relevant": row.get("is_answer_relevant"),
                 "relevance_explanation": row.get("relevance_explanation", ""),
-                "is_grounded": row.get("is_grounded")=="fully_supported",
+                "is_grounded": row.get("is_grounded", "not_fully_supported"),
                 "evidence": row.get("evidence", ""),
                 "retrieval_method": row.get("retrieval_method"),
                 "web_searched": row.get("web_searched", False),
@@ -219,10 +219,12 @@ for _, row in pbar:
         "synthesizer": row["synthesizer_name"],
         "input_tokens": metadata["input_tokens"],
         "output_tokens": metadata["output_tokens"],
-        "is_answer_relevant": metadata["is_answer_relevant"],
+        # If evidence is "max_retries_exhausted", the grounding check was skipped
+        # because retries ran out — the answer is not truly grounded
+        "is_answer_relevant": metadata["is_answer_relevant"] if metadata.get("relevance_explanation") != "max_retries_exhausted" else False,
         "relevance_explanation": metadata["relevance_explanation"],
-        "is_grounded": metadata["is_grounded"],
-        "evidence": metadata["evidence"],
+        "is_grounded": metadata.get("is_grounded", "not_fully_supported") if metadata.get("evidence") != "max_retries_exhausted" else "not_fully_supported",
+        "evidence": metadata["evidence"] if metadata["evidence"] else "",
         "retrieval_method": metadata["retrieval_method"],
         "web_searched": metadata["web_searched"],
     })
@@ -236,6 +238,31 @@ for _, row in pbar:
             "contexts": json.dumps(item["contexts"])
         })
     pd.DataFrame(progress_rows).to_csv(progress_path, index=False)
+
+# Normalize data types to prevent PyArrow mixed-type errors
+for item in evaluation_data:
+    # Ensure is_grounded is always a string Literal ("fully_supported" / "not_fully_supported")
+    ig = item.get("is_grounded")
+    if isinstance(ig, bool):
+        item["is_grounded"] = "fully_supported" if ig else "not_fully_supported"
+    elif ig is None:
+        item["is_grounded"] = "not_fully_supported"
+    elif isinstance(ig, str) and ig not in ("fully_supported", "not_fully_supported"):
+        item["is_grounded"] = "fully_supported" if ig.lower() in ("true", "fully_supported") else "not_fully_supported"
+
+    # Ensure string fields are never NaN/None (replace with empty string)
+    for str_field in ("evidence", "relevance_explanation", "retrieval_method", "synthesizer"):
+        val = item.get(str_field)
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            item[str_field] = ""
+
+    # Ensure token counts are int
+    for int_field in ("input_tokens", "output_tokens"):
+        val = item.get(int_field)
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            item[int_field] = 0
+        else:
+            item[int_field] = int(val)
 
 eval_dataset = Dataset.from_list(evaluation_data)
 
@@ -255,6 +282,20 @@ print(ragas_results)
 
 # Convert results to a DataFrame and save
 ragas_results_df = ragas_results.to_pandas()
+
+# RAGAS discards all non-standard columns during evaluate().
+# Merge our custom metadata columns back by index (row order is preserved).
+custom_columns = [
+    "input_tokens", "output_tokens", "is_answer_relevant",
+    "relevance_explanation", "is_grounded", "evidence",
+    "retrieval_method", "web_searched", "synthesizer",
+]
+custom_data = pd.DataFrame(evaluation_data)[custom_columns]
+# Reset index on both sides to guarantee alignment
+custom_data.index = ragas_results_df.index
+for col in custom_columns:
+    ragas_results_df[col] = custom_data[col]
+
 ragas_results_df.to_csv(results_path, index=False)
 
 # Update all_results.csv with overall metrics

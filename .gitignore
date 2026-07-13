@@ -1,6 +1,9 @@
 uv.lock
 .venv
-data
+data/knowledge_graph.json
+data/constitution_and_ipc.chroma
+data/constitution_and_ipc.faiss
+*.csv
 .env
 *.db
 *.db-shm

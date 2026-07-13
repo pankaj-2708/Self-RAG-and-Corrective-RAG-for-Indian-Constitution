@@ -28,6 +28,62 @@ Unlike vanilla RAG, this system **self-evaluates and self-corrects** at every st
 
 ---
 
+## Evaluation
+
+[Ragas](https://docs.ragas.io/) is used end-to-end — not just for scoring, but for building the evaluation dataset itself.
+
+### Evaluation Methodology
+
+1. **Knowledge Graph Construction** — A knowledge graph is first built from the document corpus (Constitution articles & IPC sections) using Ragas's `KnowledgeGraph` API, capturing entity and relationship structure across the legal texts. ([`knowledge_graph.py`](src/evaluation/knowledge_graph.py))
+
+2. **K-Means Clustering for Diverse Sampling** — To ensure the test set covers the full breadth of the corpus, all document chunks are embedded using `all-mpnet-base-v2`, then K-means clustering is run (sweeping k=4–24, selecting optimal k via silhouette score). Stratified sampling from each cluster produces a representative subset of 100 documents. ([`clustering.py`](src/evaluation/clustering.py))
+
+3. **Synthetic Test Set Generation** — Using Ragas's `TestsetGenerator` with the knowledge graph and the sampled documents, diverse evaluation queries (single-hop, multi-hop, etc.) are generated along with reference answers and reference contexts — no manual question authoring required. ([`test_set_generation.py`](src/evaluation/test_set_generation.py))
+
+4. **End-to-End Evaluation** — Each test query is run through the full LangGraph pipeline, and the generated answer + retrieved contexts are scored by Ragas across four metrics. Results are versioned, resumable, and saved with full per-query metadata. ([`evaluate.py`](src/evaluation/evaluate.py))
+
+### Metrics
+
+| Metric | What it measures |
+|---|---|
+| **Faithfulness** | Is the answer factually consistent with the retrieved context? |
+| **Answer Relevancy** | Does the answer address the user's question? |
+| **Context Precision** | Are the retrieved documents relevant to the question? (Non-LLM, reference-based) |
+| **Context Recall** | Were all necessary reference documents retrieved? |
+
+### Results
+
+| Metric | Score |
+|---|---|
+| **Faithfulness** | 0.96 |
+| **Answer Relevancy** | 0.75 |
+| **Context Precision** (Non-LLM, reference-based) | 0.95 |
+| **Context Recall** | 0.90 |
+
+### Running the Evaluation
+
+```bash
+python src/evaluation/evaluate.py
+```
+
+> Results are versioned and saved to `data/evaluation_progress_results/`. The pipeline supports **resumable runs** — if interrupted, it picks up where it left off.
+
+<details>
+<summary><strong>Why <code>context_precision</code> uses a non-LLM variant</strong></summary>
+
+Ragas's LLM-based `context_precision` evaluates each chunk independently against the full generated answer. For multi-hop questions (e.g., synthesizing two Constitution articles), this produces false negatives — neither article alone supports the combined answer, yielding a score of 0 despite perfect retrieval. `NonLLMContextPrecisionWithReference` is used instead, which compares against reference contexts directly. This is a [documented limitation](https://github.com/explodinggradients/ragas/issues/308) of the original metric.
+
+</details>
+
+<details>
+<summary><strong>A note on the <code>answer_relevancy</code> score</strong></summary>
+
+Answer relevancy scores can appear artificially low on compound, multi-part questions due to a known limitation in Ragas's `ResponseRelevancy` metric: it generates 3 hypothetical questions from the answer (by default) and averages their similarity to the original question, but does not guarantee these generated questions are actually diverse — it simply re-runs the same prompt multiple times and relies on sampling randomness for variation. This is a well-known, previously reported issue, documented in [GitHub Issue #1979](https://github.com/explodinggradients/ragas/issues/1979) ("ResponseRelevancy does not guarantee varied questions, making strictness effectively pointless") and [GitHub Issue #1192](https://github.com/explodinggradients/ragas/issues/1192) ("Answer Relevancy giving same questions everytime"), and is compounded by a separate reported bug where the evaluator LLM's temperature setting is sometimes ignored, further reducing output diversity ([GitHub Issue #1812](https://github.com/explodinggradients/ragas/issues/1812)). In this evaluation, this caused all 3 generated questions for all the test queries to be identical, capturing only one clause of the original multi-part question and understating the true relevancy score.
+
+</details>
+
+---
+
 ## Key Features
 
 | Feature | Description |
@@ -114,6 +170,7 @@ graph TD
     classDef webNode fill:#164e63,stroke:#22d3ee,stroke-width:2px,color:#cffafe
 ```
 
+
 **Legend**
 
 | Colour | Stage |
@@ -129,16 +186,9 @@ graph TD
 
 ## Demo
 
-<!-- ┌──────────────────────────────────────────────────────────────────┐ -->
-<!-- │  ADD YOUR PROJECT SCREENSHOT BELOW                              │ -->
-<!-- │  Replace the empty src with your actual screenshot path.        │ -->
-<!-- │  Example: src="assets/demo_screenshot.png"                      │ -->
-<!-- └──────────────────────────────────────────────────────────────────┘ -->
-
 <p align="center">
-  <img src="" alt="Project Demo Screenshot" width="85%" />
+  <img src="data/demo_sc.png" alt="Project Demo Screenshot" width="85%" />
   <br />
-  <em>Screenshot of the interactive CLI in action — add your screenshot here.</em>
 </p>
 
 ---
@@ -264,32 +314,6 @@ python src/cli.py
 
 ---
 
-## Evaluation
-
-The system is evaluated using [Ragas](https://docs.ragas.io/) across four metrics:
-
-| Metric | What it measures |
-|---|---|
-| **Faithfulness** | Is the answer factually consistent with the retrieved context? |
-| **Answer Relevancy** | Does the answer address the user's question? |
-| **Context Precision** | Are the retrieved documents relevant to the question? (Non-LLM, reference-based) |
-| **Context Recall** | Were all necessary reference documents retrieved? |
-
-Run the evaluation suite:
-
-```bash
-python src/evaluation/evaluate.py
-```
-
-> Results are versioned and saved to `data/evaluation_progress_results/`. The pipeline supports **resumable runs** — if interrupted, it picks up where it left off.
-
-<details>
-<summary><strong>Why <code>context_precision</code> uses a non-LLM variant</strong></summary>
-
-Ragas's LLM-based `context_precision` evaluates each chunk independently against the full generated answer. For multi-hop questions (e.g., synthesizing two Constitution articles), this produces false negatives — neither article alone supports the combined answer, yielding a score of 0 despite perfect retrieval. We use `NonLLMContextPrecisionWithReference` instead, which compares against reference contexts directly. This is a [documented limitation](https://github.com/explodinggradients/ragas/issues/308) of the original metric.
-
-</details>
-
 ---
 
 ## How It Works
@@ -311,6 +335,19 @@ Ragas's LLM-based `context_precision` evaluates each chunk independently against
 8. **Relevance Validation** — A judge model assesses whether the answer actually addresses the user's question. Irrelevant answers are rewritten with explicit reference to the relevance gap.
 
 9. **Response Delivery** — The validated, grounded, relevant answer is returned to the user.
+
+---
+
+## Data
+
+The legal corpus used in this project was parsed and structured from official Indian government websites:
+
+| File | Source | Description |
+|---|---|---|
+| `data/articles.json` | [Legislative Department, Ministry of Law and Justice](https://legislative.gov.in/constitution-of-india/) | All articles of the Constitution of India |
+| `data/penal_code_sections.json` | [India Code](https://www.indiacode.nic.in/) | Sections of the Indian Penal Code (IPC) |
+
+The raw data was scraped, cleaned, and structured into JSON format via the [`data_collector.ipynb`](notebooks/data_collector.ipynb) notebook.
 
 ---
 
