@@ -4,6 +4,7 @@
   <img src="https://img.shields.io/badge/DeepSeek_R1_&_V3-AWS_Bedrock-FF9900?style=for-the-badge&logo=amazonwebservices&logoColor=white" />
   <img src="https://img.shields.io/badge/ChromaDB-Vector_Store-00AA6C?style=for-the-badge" />
   <img src="https://img.shields.io/badge/Ragas-Evaluation-EF4444?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/DVC-Reproducible_Pipelines-13ADC7?style=for-the-badge&logo=dvc&logoColor=white" />
 </p>
 
 <h1 align="center">Self-RAG & Corrective RAG for the Indian Constitution & IPC</h1>
@@ -40,7 +41,9 @@ Unlike vanilla RAG, this system **self-evaluates and self-corrects** at every st
 
 3. **Synthetic Test Set Generation** — Using Ragas's `TestsetGenerator` with the knowledge graph and the sampled documents, diverse evaluation queries (single-hop, multi-hop, etc.) are generated along with reference answers and reference contexts — no manual question authoring required. ([`test_set_generation.py`](src/evaluation/test_set_generation.py))
 
-4. **End-to-End Evaluation** — Each test query is run through the full LangGraph pipeline, and the generated answer + retrieved contexts are scored by Ragas across four metrics. Results are versioned, resumable, and saved with full per-query metadata. ([`evaluate.py`](src/evaluation/evaluate.py))
+4. **End-to-End Evaluation** — Each test query is run through the full LangGraph pipeline, and the generated answer + retrieved contexts are scored by Ragas across four metrics. **Evaluation is performed on a 50-row dataset.** Results are versioned, resumable, and saved with full per-query metadata. ([`evaluate.py`](src/evaluation/evaluate.py))
+
+5. **DVC Pipeline for Reproducibility** — The entire evaluation workflow (knowledge graph → clustering → test set generation → scoring) is tracked and reproducible via a [DVC](https://dvc.org/) pipeline (`dvc.yaml`). Running `dvc repro` re-executes only the stages whose inputs have changed, ensuring consistent, auditable results.
 
 ### Metrics
 
@@ -53,6 +56,8 @@ Unlike vanilla RAG, this system **self-evaluates and self-corrects** at every st
 
 ### Results
 
+> Evaluated on a **50-row test set** generated from the Constitution of India & IPC corpus.
+
 | Metric | Score |
 |---|---|
 | **Faithfulness** | 0.96 |
@@ -60,7 +65,38 @@ Unlike vanilla RAG, this system **self-evaluates and self-corrects** at every st
 | **Context Precision** (Non-LLM, reference-based) | 0.95 |
 | **Context Recall** | 0.90 |
 
+### Token Usage
+
+Total tokens consumed across knowledge graph construction, synthetic test set generation, and end-to-end evaluation:
+
+| Scope | Tokens |
+|---|---|
+| **Total (all stages combined)** | ~1.17 million |
+
+### Latency Benchmarks
+
+End-to-end pipeline latency measured across the 50 evaluation queries:
+
+| Percentile | Latency |
+|---|---|
+| **p50** | 2.11 s |
+| **p75** | 3.03 s |
+| **p90** | 16 s |
+| **p95** | 81.8 s |
+
+> The high p95 latency reflects queries that trigger the self-correction loop (grounding revision + answer rewrite), which adds multiple sequential LLM calls.
+
 ### Running the Evaluation
+
+#### With DVC (recommended — fully reproducible)
+
+```bash
+dvc repro
+```
+
+This re-runs only the stages whose inputs or parameters have changed. Outputs and metrics are tracked automatically.
+
+#### Directly
 
 ```bash
 python src/evaluation/evaluate.py
@@ -204,6 +240,7 @@ graph TD
 | **Web Search** | [Tavily Search API](https://tavily.com/) — real-time web search fallback |
 | **Observability** | [Arize Phoenix](https://phoenix.arize.com/) — LLM tracing & monitoring |
 | **Evaluation** | [Ragas](https://docs.ragas.io/) — faithfulness, relevancy, context recall & precision |
+| **Pipeline Reproducibility** | [DVC](https://dvc.org/) — versioned, reproducible evaluation pipeline |
 | **CLI** | [Rich](https://github.com/Textualize/rich) — beautiful terminal interface with streaming |
 | **Package Manager** | [uv](https://github.com/astral-sh/uv) — fast Python package management |
 
@@ -239,6 +276,8 @@ constitution_rag/
 │   ├── srag.ipynb                      # Self-RAG prototyping & experiments
 │   ├── ragas.ipynb                     # Ragas evaluation experiments
 │   └── ragas_results.ipynb             # Evaluation results analysis
+├── dvc.yaml                            # DVC pipeline definition (evaluation stages)
+├── dvc.lock                            # DVC lock file (reproducibility snapshot)
 ├── pyproject.toml                      # Project config & dependencies
 ├── .env                                # API keys (not committed)
 └── README.md

@@ -1,13 +1,28 @@
+import os
+import sys
+import yaml
+
+# Resolve paths and check execution parameter before loading heavy modules or telemetry
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../data"))
+PARAMS_PATH = os.path.abspath(os.path.join(DATA_DIR, "../params.yaml"))
+
+with open(PARAMS_PATH, "r") as f:
+    params = yaml.safe_load(f)["test_set_generation"]
+
+generate_test_set = params.get("generate_test_set", True)
+test_size = params.get("test_size", 50)
+
+if not generate_test_set:
+    print("generate_test_set is set to False in params.yaml. Exiting test set generation stage.")
+    sys.exit(0)
+
 from phoenix.otel import register
 tracer_provider = register(
   project_name="constitution",
   auto_instrument=True 
 )
 
-
-import os
-import sys
-import yaml
 import warnings
 from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -23,22 +38,8 @@ warnings.filterwarnings("ignore")
 
 load_dotenv()
 
-
-# Resolve paths relative to the file location to make it run from anywhere
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../data"))
-PARAMS_PATH = os.path.abspath(os.path.join(DATA_DIR, "../params.yaml"))
 kg_path = os.path.join(DATA_DIR, "knowledge_graph.json")
 test_set_path = os.path.join(DATA_DIR, "test_set.csv")
-
-with open(PARAMS_PATH, "r") as f:
-    params = yaml.safe_load(f)["test_set_generation"]
-
-generate_test_set = params.get("generate_test_set", True)
-test_size = params.get("test_size", 50)
-
-if not generate_test_set:
-    sys.exit()
 
 generator_embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
 generator_embeddings = LangchainEmbeddingsWrapper(generator_embeddings)

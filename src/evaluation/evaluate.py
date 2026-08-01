@@ -1,3 +1,21 @@
+import os
+import sys
+import yaml
+
+# Resolve paths and check execution parameter before loading heavy modules or telemetry
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../data"))
+PARAMS_PATH = os.path.abspath(os.path.join(DATA_DIR, "../params.yaml"))
+
+with open(PARAMS_PATH, "r") as f:
+    params = yaml.safe_load(f)["evaluate"]
+
+evaluate_rag = params.get("evaluate_rag", True)
+
+if not evaluate_rag:
+    print("evaluate_rag is set to False in params.yaml. Exiting evaluation stage.")
+    sys.exit(0)
+
 from phoenix.otel import register
 tracer_provider = register(
   project_name="constitution",
@@ -6,9 +24,6 @@ tracer_provider = register(
 
 import warnings
 warnings.filterwarnings("ignore")
-import os
-import sys
-import yaml
 import pandas as pd
 import ast
 import json
@@ -39,30 +54,17 @@ load_dotenv()
 import glob
 import re
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../data"))
 test_set_path = os.path.join(DATA_DIR, "test_set.csv")
-PARAMS_PATH = os.path.abspath(os.path.join(DATA_DIR, "../params.yaml"))
-
-with open(PARAMS_PATH, "r") as f:
-    params = yaml.safe_load(f)["evaluate"]
-
-evaluate_rag = params["evaluate_rag"]
-
-if evaluate_rag:
-    pass
-else:
-    sys.exit()
 
 RESULTS_DIR = os.path.join(DATA_DIR, "evaluation_progress_results")
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
-progress_path = os.path.join(RESULTS_DIR, "sample_evaluation_progress2.csv")
-history_path = os.path.join(RESULTS_DIR, "sample_evaluation_history2.csv")
-all_results_path = os.path.join(RESULTS_DIR, "sample_all_results2.csv")
+progress_path = os.path.join(RESULTS_DIR, "evaluation_progress2.csv")
+history_path = os.path.join(RESULTS_DIR, "evaluation_history2.csv")
+all_results_path = os.path.join(RESULTS_DIR, "all_results2.csv")
 
 # Determine next version
-existing_files = glob.glob(os.path.join(RESULTS_DIR, "sample_results_v*.csv"))
+existing_files = glob.glob(os.path.join(RESULTS_DIR, "results_v*.csv"))
 versions = []
 for f in existing_files:
     match = re.search(r'results_v(\d+)\.csv$', os.path.basename(f))

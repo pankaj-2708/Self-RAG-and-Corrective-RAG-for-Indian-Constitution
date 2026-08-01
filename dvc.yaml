@@ -2,41 +2,48 @@ stages:
   clustering:
     cmd: python ./src/evaluation/clustering.py
     deps:
-    - ./src/evaluation/clustering.py
-    - ./data/constitution_and_ipc.chroma
+      - ./src/evaluation/clustering.py
+      - ./data/constitution_and_ipc.chroma
     outs:
-    - ./data/sampled_df.csv
-    - ./data/df.csv
+      - ./data/sampled_df.csv
+      - ./data/df.csv
 
   knowledge_graph:
     cmd: python ./src/evaluation/knowledge_graph.py
     deps:
-    - ./src/evaluation/knowledge_graph.py
-    - ./data/sampled_df.csv
-    - ./data/knowledge_graph2.json
+      - ./src/evaluation/knowledge_graph.py
+      - ./data/sampled_df.csv
+      # Removed ./data/knowledge_graph.json from deps here
     params:
-    - knowledge_graph.create_knowledge_graph
+      - knowledge_graph.create_knowledge_graph
     outs:
-    - ./data/knowledge_graph.json
-    
+      - ./data/knowledge_graph.json:
+          cache: false
+          persist: true
 
   test_set_generation:
     cmd: python ./src/evaluation/test_set_generation.py
     deps:
-    - ./src/evaluation/test_set_generation.py
-    - ./data/knowledge_graph.json
+      - ./src/evaluation/test_set_generation.py
+      - ./data/knowledge_graph.json 
+      # Removed ./data/test_set.csv from deps here
     params:
-    - test_set_generation.generate_test_set
-    - test_set_generation.test_size
+      - test_set_generation.generate_test_set
+      - test_set_generation.test_size
     outs:
-    - ./data/test_set.csv
+      - ./data/test_set.csv:
+          cache: false
+          persist: true
 
   evaluate:
     cmd: python ./src/evaluation/evaluate.py
     deps:
-    - ./src/evaluation/evaluate.py
-    - ./data/test_set.csv
+      - ./src/evaluation/evaluate.py
+      - ./data/test_set.csv       
+      # Removed ./data/evaluation_progress_results/ from deps here
     params:
-    - evaluate.evaluate_rag
+      - evaluate.evaluate_rag
     outs:
-    - ./data/evaluation_progress_results/
+      - ./data/evaluation_progress_results/:
+          cache: false
+          persist: true

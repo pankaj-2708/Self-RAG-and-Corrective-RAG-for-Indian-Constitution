@@ -5,7 +5,7 @@ stages:
     deps:
     - path: ./data/constitution_and_ipc.chroma
       hash: md5
-      md5: 9c1644d5fdd311762b9e5857281bf3c8.dir
+      md5: 20319f86d4abbc7e0b99a96b09c10d14.dir
       size: 16279956
       nfiles: 6
     - path: ./src/evaluation/clustering.py
@@ -24,18 +24,14 @@ stages:
   knowledge_graph:
     cmd: python ./src/evaluation/knowledge_graph.py
     deps:
-    - path: ./data/knowledge_graph2.json
-      hash: md5
-      md5: d2fc33f4d8f679f9bdc1ed5ed3ed3f9a
-      size: 3345734
     - path: ./data/sampled_df.csv
       hash: md5
       md5: f4756c610aab61fe3afa955365db22a4
       size: 1342558
     - path: ./src/evaluation/knowledge_graph.py
       hash: md5
-      md5: 3e0263d01f6c3e709429fc220bab9f65
-      size: 3120
+      md5: c107a73d0c04327b05141b97cc4df5ea
+      size: 3372
     params:
       params.yaml:
         knowledge_graph.create_knowledge_graph: false
@@ -53,14 +49,34 @@ stages:
       size: 3345734
     - path: ./src/evaluation/test_set_generation.py
       hash: md5
-      md5: afe56086f7478eee97d7bb3c2b1e8b62
-      size: 2182
+      md5: f2c003f1d1bf220c0558cbe9b376473a
+      size: 2294
     params:
       params.yaml:
-        test_set_generation.generate_test_set: true
+        test_set_generation.generate_test_set: false
         test_set_generation.test_size: 50
     outs:
     - path: ./data/test_set.csv
       hash: md5
       md5: 94a8296eb1015bd1ba917993b363929c
       size: 134113
+  evaluate:
+    cmd: python ./src/evaluation/evaluate.py
+    deps:
+    - path: ./data/test_set.csv
+      hash: md5
+      md5: 94a8296eb1015bd1ba917993b363929c
+      size: 134113
+    - path: ./src/evaluation/evaluate.py
+      hash: md5
+      md5: e31d67db36bea0717f60b056b9eff5c7
+      size: 14523
+    params:
+      params.yaml:
+        evaluate.evaluate_rag: true
+    outs:
+    - path: ./data/evaluation_progress_results/
+      hash: md5
+      md5: 68d0d487ba864ec8c3e19b3c5dcd7c0d.dir
+      size: 567702
+      nfiles: 3

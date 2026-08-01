@@ -1,14 +1,37 @@
+import os
+import sys
+import yaml
+
+# Resolve paths and check execution parameter before loading heavy modules or telemetry
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../data"))
+PARAMS_PATH = os.path.abspath(os.path.join(DATA_DIR, "../params.yaml"))
+kg_path = os.path.join(DATA_DIR, "knowledge_graph.json")
+
+with open(PARAMS_PATH, "r") as f:
+    params = yaml.safe_load(f)["knowledge_graph"]
+
+create_knowledge_graph = params.get("create_knowledge_graph", True)
+
+if not create_knowledge_graph:
+    # assuming knowledge_graph.json already exists, just rewriting it for dvc
+    if os.path.exists(kg_path):
+        from ragas.testset.graph import KnowledgeGraph
+        kg = KnowledgeGraph().load(kg_path)
+        print(f"create_knowledge_graph is set to False in params.yaml. Loaded knowledge graph from {kg_path}")
+        kg.save(kg_path)
+    else:
+        print(f"create_knowledge_graph is set to False in params.yaml and {kg_path} does not exist. Exiting.")
+    sys.exit(0)
+
 from phoenix.otel import register
 tracer_provider = register(
   project_name="constitution",
   auto_instrument=True 
 )
 
-import os
 import json
-import yaml
 import ast
-import sys
 import warnings
 import pandas as pd
 from dotenv import load_dotenv
@@ -29,27 +52,7 @@ load_dotenv()
 if not os.environ.get('AWS_BEARER_TOKEN_BEDROCK'):
     raise ValueError("AWS_BEARER_TOKEN_BEDROCK environment variable is not set")
 
-# Resolve paths relative to the file location to make it run from anywhere
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../data"))
-PARAMS_PATH = os.path.abspath(os.path.join(DATA_DIR, "../params.yaml"))
 sampled_df_path = os.path.join(DATA_DIR, "sampled_df.csv")
-kg_path = os.path.join(DATA_DIR, "knowledge_graph.json")
-
-
-with open(PARAMS_PATH, "r") as f:
-    params = yaml.safe_load(f)["knowledge_graph"]
-
-create_knowledge_graph = params["create_knowledge_graph"]
-
-if create_knowledge_graph:
-    pass
-else:
-    # assuming knowledge_graph.json already exsits just rewritng it for dvc
-    kg = KnowledgeGraph().load(os.path.join(DATA_DIR,"knowledge_graph2.json"))
-    print(f"Loaded knowledge graph from {kg_path}")
-    kg.save(kg_path)
-    sys.exit()
     
 
 generator_embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")

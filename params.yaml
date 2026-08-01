@@ -3,7 +3,7 @@ knowledge_graph:
 
 test_set_generation:
   test_size: 50
-  generate_test_set: True
+  generate_test_set: False
 
 evaluate:
   evaluate_rag: True
