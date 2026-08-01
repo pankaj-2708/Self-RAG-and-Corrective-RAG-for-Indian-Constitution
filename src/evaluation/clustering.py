@@ -12,21 +12,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-if not os.environ.get('OLLAMA_API_KEY'):
-    raise ValueError("No ollama api key")
-else:
-    OLLAMA_API_KEY = os.environ['OLLAMA_API_KEY']
 
 # Resolve paths relative to the file location to make it run from anywhere
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../data"))
 vector_store_path = os.path.join(DATA_DIR, "constitution_and_ipc.chroma")
 
-generator_embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+# generator_embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
 vector_store = Chroma(
     collection_name="constitution_and_ipc",
     persist_directory=vector_store_path,
-    embedding_function=generator_embeddings
+    # embedding_function=generator_embeddings
 )
 
 data = vector_store.get(include=["documents", "metadatas", "embeddings"])
@@ -34,7 +30,7 @@ t_documents = data["documents"]
 t_metadata = data["metadatas"]
 t_embedding = data["embeddings"]
 
-df = pd.DataFrame({"document": t_documents, "metadata": t_metadata, "embedding": t_embedding})
+df = pd.DataFrame({"document": t_documents, "metadata": t_metadata, "embedding": list(t_embedding)})
 
 embeddings = []
 for i in range(df.shape[0]):

@@ -1,0 +1,11 @@
+knowledge_graph:
+  create_knowledge_graph: False
+
+test_set_generation:
+  test_size: 50
+  generate_test_set: True
+
+evaluate:
+  evaluate_rag: True
+  continue_previous_run: "yes"
+  mode: "dvc"

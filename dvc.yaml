@@ -1,0 +1,42 @@
+stages:
+  clustering:
+    cmd: python ./src/evaluation/clustering.py
+    deps:
+    - ./src/evaluation/clustering.py
+    - ./data/constitution_and_ipc.chroma
+    outs:
+    - ./data/sampled_df.csv
+    - ./data/df.csv
+
+  knowledge_graph:
+    cmd: python ./src/evaluation/knowledge_graph.py
+    deps:
+    - ./src/evaluation/knowledge_graph.py
+    - ./data/sampled_df.csv
+    - ./data/knowledge_graph2.json
+    params:
+    - knowledge_graph.create_knowledge_graph
+    outs:
+    - ./data/knowledge_graph.json
+    
+
+  test_set_generation:
+    cmd: python ./src/evaluation/test_set_generation.py
+    deps:
+    - ./src/evaluation/test_set_generation.py
+    - ./data/knowledge_graph.json
+    params:
+    - test_set_generation.generate_test_set
+    - test_set_generation.test_size
+    outs:
+    - ./data/test_set.csv
+
+  evaluate:
+    cmd: python ./src/evaluation/evaluate.py
+    deps:
+    - ./src/evaluation/evaluate.py
+    - ./data/test_set.csv
+    params:
+    - evaluate.evaluate_rag
+    outs:
+    - ./data/evaluation_progress_results/

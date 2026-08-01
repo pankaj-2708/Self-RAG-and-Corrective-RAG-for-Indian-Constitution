@@ -1,7 +1,14 @@
+from phoenix.otel import register
+tracer_provider = register(
+  project_name="constitution",
+  auto_instrument=True 
+)
+
 import warnings
 warnings.filterwarnings("ignore")
 import os
 import sys
+import yaml
 import pandas as pd
 import ast
 import json
@@ -34,7 +41,18 @@ import re
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../data"))
-test_set_path = os.path.join(DATA_DIR, "sample_test_set.csv")
+test_set_path = os.path.join(DATA_DIR, "test_set.csv")
+PARAMS_PATH = os.path.abspath(os.path.join(DATA_DIR, "../params.yaml"))
+
+with open(PARAMS_PATH, "r") as f:
+    params = yaml.safe_load(f)["evaluate"]
+
+evaluate_rag = params["evaluate_rag"]
+
+if evaluate_rag:
+    pass
+else:
+    sys.exit()
 
 RESULTS_DIR = os.path.join(DATA_DIR, "evaluation_progress_results")
 os.makedirs(RESULTS_DIR, exist_ok=True)
@@ -167,7 +185,10 @@ evaluation_data = []
 completed_questions = set()
 
 if os.path.exists(progress_path):
-    choice = input("Previous run progress found. Do you want to continue the previous run? (yes/no): ").strip().lower()
+    if params['mode']=="dvc":
+        choice=params['continue_previous_run']
+    else:
+        choice = input("Previous run progress found. Do you want to continue the previous run? (yes/no): ").strip().lower()
     if choice in ['y', 'yes']:
         print(f"Loading progress from {progress_path}...")
         progress_df = pd.read_csv(progress_path)

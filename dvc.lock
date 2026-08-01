@@ -1,0 +1,66 @@
+schema: '2.0'
+stages:
+  clustering:
+    cmd: python ./src/evaluation/clustering.py
+    deps:
+    - path: ./data/constitution_and_ipc.chroma
+      hash: md5
+      md5: 9c1644d5fdd311762b9e5857281bf3c8.dir
+      size: 16279956
+      nfiles: 6
+    - path: ./src/evaluation/clustering.py
+      hash: md5
+      md5: 0c821f66e30647b83dd54ff0a6d71d2c
+      size: 2741
+    outs:
+    - path: ./data/df.csv
+      hash: md5
+      md5: 8599155de62e53a0dfc0307d7170f939
+      size: 14016185
+    - path: ./data/sampled_df.csv
+      hash: md5
+      md5: f4756c610aab61fe3afa955365db22a4
+      size: 1342558
+  knowledge_graph:
+    cmd: python ./src/evaluation/knowledge_graph.py
+    deps:
+    - path: ./data/knowledge_graph2.json
+      hash: md5
+      md5: d2fc33f4d8f679f9bdc1ed5ed3ed3f9a
+      size: 3345734
+    - path: ./data/sampled_df.csv
+      hash: md5
+      md5: f4756c610aab61fe3afa955365db22a4
+      size: 1342558
+    - path: ./src/evaluation/knowledge_graph.py
+      hash: md5
+      md5: 3e0263d01f6c3e709429fc220bab9f65
+      size: 3120
+    params:
+      params.yaml:
+        knowledge_graph.create_knowledge_graph: false
+    outs:
+    - path: ./data/knowledge_graph.json
+      hash: md5
+      md5: d2fc33f4d8f679f9bdc1ed5ed3ed3f9a
+      size: 3345734
+  test_set_generation:
+    cmd: python ./src/evaluation/test_set_generation.py
+    deps:
+    - path: ./data/knowledge_graph.json
+      hash: md5
+      md5: d2fc33f4d8f679f9bdc1ed5ed3ed3f9a
+      size: 3345734
+    - path: ./src/evaluation/test_set_generation.py
+      hash: md5
+      md5: afe56086f7478eee97d7bb3c2b1e8b62
+      size: 2182
+    params:
+      params.yaml:
+        test_set_generation.generate_test_set: true
+        test_set_generation.test_size: 50
+    outs:
+    - path: ./data/test_set.csv
+      hash: md5
+      md5: 94a8296eb1015bd1ba917993b363929c
+      size: 134113
