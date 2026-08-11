@@ -11,3 +11,10 @@ def is_grounded_condition(state: schema):
 
 def is_answer_relevant_condition(state: schema):
     return state["is_answer_relevant"] or state["max_retry_for_answer_relevant_checking"] <= 0
+
+def memory_summary_condition(state: schema):
+    counter = state.get("turns_until_summary_update")
+    if counter is not None and counter <= 0:
+        return "summarize"
+    return "end"
+

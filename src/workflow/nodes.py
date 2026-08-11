@@ -1,4 +1,4 @@
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from workflow.state import schema
 from workflow.config import (
     decision_model, retrieval_decider_model, query_gen_model, generation_model,
@@ -27,7 +27,8 @@ from workflow.prompts import (
     sys_prompt_for_is_answer_relevant_node,
     sys_prompt_for_rewrite_answer_node,
     sys_prompt_for_retriever_query_node,
-    sys_prompt_for_web_search_query_node
+    sys_prompt_for_web_search_query_node,
+    sys_prompt_for_modify_short_term_memory_node
 )
 from langgraph.types import Send
 
@@ -61,7 +62,10 @@ def retrieval_decider_node(state: schema):
     return {
         "retrieval_required": res,
         "input_tokens": usage.get("input_tokens", 0),
-        "output_tokens": usage.get("output_tokens", 0)
+        "output_tokens": usage.get("output_tokens", 0),
+        # to empty them
+        "retrieved_contexts":["-1"],
+            "relevant_contexts":["-1"]
     }
 
 def generate_retriever_query_node(state: schema):
@@ -143,10 +147,23 @@ def aggregate_retrieval(state: schema):
     
 
 def direct_generation_node(state: schema):
-    response = generation_model.invoke(state["user_query"])
+    summary = state.get("local_memory_summary") or ""
+    history_msgs = state.get("messages") or []
+    msgs_to_include = state.get("messages_to_include") or 0
+    
+    num_msgs = msgs_to_include * 2
+    recent_history = history_msgs[-num_msgs:] if (num_msgs > 0 and history_msgs) else []
+    
+    prompt_msgs = []
+    if summary:
+        prompt_msgs.append(SystemMessage(content=f"Prior Conversation Summary:\n{summary}"))
+    prompt_msgs.extend(recent_history)
+    prompt_msgs.append(HumanMessage(content=state["user_query"]))
+    
+    response = generation_model.invoke(prompt_msgs)
     usage = response.usage_metadata or {}
     return {
-        "generated_response": response.content,
+        "generated_response": _extract_r1_text(response.content),
         "input_tokens": usage.get("input_tokens", 0),
         "output_tokens": usage.get("output_tokens", 0)
     }
@@ -193,16 +210,32 @@ def aggregate_relevance(state):
 def answer_from_context_node(state: schema):
     contexts = state["relevant_contexts"]
     sys_prompt = SystemMessage(content=sys_prompt_for_answer_from_context_node)
+    msgs_to_include = state.get("messages_to_include") or 0
 
     context = ""
     for i in contexts:
         context += i
         context += "\n"
 
+    summary = state.get("local_memory_summary") or ""
+    history_msgs = state.get("messages") or []
+    num_msgs = msgs_to_include * 2
+    recent_history = history_msgs[-num_msgs:] if (num_msgs > 0 and history_msgs) else []
+    
+    history_str = ""
+    if summary:
+        history_str += f"Prior Conversation Summary:\n{summary}\n\n"
+    if recent_history:
+        history_str += f"Recent Conversation History ({msgs_to_include} turn(s)):\n"
+        for m in recent_history:
+            role = "Human" if isinstance(m, HumanMessage) else "AI"
+            history_str += f"{role}: {m.content}\n"
+        history_str += "\n"
+
     hmn_prompt = HumanMessage(
-        content=f"Query - {state['user_query']} \n\n Contexts - \n {context}"
+        content=f"{history_str}Query - {state['user_query']} \n\n Contexts - \n {context}"
     )
-    inp = [sys_prompt,hmn_prompt]
+    inp = [sys_prompt, hmn_prompt]
 
     response = context_answer_model.invoke(inp)
     usage = response.usage_metadata or {}
@@ -381,3 +414,61 @@ def web_search_node(state: schema):
             # Print/log the exception and keep going with other queries
             print(f"Error querying Tavily for '{query}': {e}")
     return {"relevant_contexts": res, "web_searched": True}
+
+def memory_node(state: schema):
+    messages = list(state.get("messages") or [])
+    user_query = state.get("user_query", "")
+    generated_response = state.get("generated_response", "")
+    
+    if user_query:
+        messages.append(HumanMessage(content=user_query))
+    if generated_response:
+        messages.append(AIMessage(content=generated_response))
+        
+    current_counter = state.get("turns_until_summary_update")
+    max_turns = state.get("max_turns_before_summarisation") or 2
+    if current_counter is None:
+        current_counter = max_turns
+        
+    new_counter = current_counter - 1
+    
+    messages_to_inc = state.get("messages_to_include")
+    if messages_to_inc is None:
+        messages_to_inc = 0
+    new_messages_to_inc = messages_to_inc + 1
+            
+    return {
+        "messages": messages,
+        "turns_until_summary_update": new_counter,
+        "messages_to_include": new_messages_to_inc
+    }
+
+def modify_short_term_memory_node(state: schema):
+    summary = state.get("local_memory_summary") or "No prior summary."
+    messages = state.get("messages") or []
+    max_turns = state.get("max_turns_before_summarisation") or 2
+    
+    # Extract the conversation turns that occurred since last summary (latest max_turns * 2 messages)
+    recent_msgs = messages[-(max_turns * 2):]
+    recent_conv_str = ""
+    for msg in recent_msgs:
+        role = "Human" if isinstance(msg, HumanMessage) else "AI"
+        recent_conv_str += f"{role}: {msg.content}\n"
+
+    prompt = [
+        SystemMessage(content=sys_prompt_for_modify_short_term_memory_node),
+        HumanMessage(content=f"Existing Summary:\n{summary}\n\nNew Conversation Turns:\n{recent_conv_str}\n\nPlease generate the updated consolidated summary:")
+    ]
+    
+    response = generation_model.invoke(prompt)
+    usage = response.usage_metadata or {}
+    updated_summary = _extract_r1_text(response.content)
+    
+    return {
+        "local_memory_summary": updated_summary,
+        "turns_until_summary_update": max_turns,
+        "messages_to_include": 0,
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0)
+    }
+

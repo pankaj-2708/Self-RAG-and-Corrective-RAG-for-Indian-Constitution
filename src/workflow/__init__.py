@@ -9,11 +9,11 @@ from workflow.nodes import (
     is_relevant_node, answer_from_context_node, check_answer_grounded_node,
     revise_answer_node, is_answer_relevant_node, rewrite_answer_node, web_search_node,
     generate_retriever_query_node, generate_web_search_query_node, fanout_relevant_node, aggregate_relevance,
-    fanout_retrieve_node, aggregate_retrieval
+    fanout_retrieve_node, aggregate_retrieval, memory_node, modify_short_term_memory_node
 )
 from workflow.edges import (
     retrieval_decider_condition, is_relevant_condition,
-    is_grounded_condition, is_answer_relevant_condition
+    is_grounded_condition, is_answer_relevant_condition, memory_summary_condition
 )
 
 from phoenix.otel import register
@@ -41,6 +41,8 @@ graph.add_node("generate_web_search_query_node", generate_web_search_query_node)
 graph.add_node("web_search_node", web_search_node)
 graph.add_node("aggregate_retrieval", aggregate_retrieval)
 graph.add_node("aggregate_relevance", aggregate_relevance)
+graph.add_node("memory_node", memory_node)
+graph.add_node("modify_short_term_memory_node", modify_short_term_memory_node)
 
 graph.add_edge(START, "retrieval_decider_node")
 graph.add_conditional_edges(
@@ -58,7 +60,7 @@ graph.add_conditional_edges(
     path_map=["retrieve_node"],
 )
 graph.add_edge("generate_web_search_query_node", "web_search_node")
-graph.add_edge("direct_generation_node", END)
+graph.add_edge("direct_generation_node", "memory_node")
 graph.add_edge("retrieve_node", "aggregate_retrieval")
 graph.add_conditional_edges(
     "aggregate_retrieval",
@@ -82,13 +84,24 @@ graph.add_edge("revise_answer_node", "check_answer_grounded_node")
 graph.add_conditional_edges(
     "is_answer_relevant_node",
     is_answer_relevant_condition,
-    {True: END, False: "rewrite_answer_node"},
+    {True: "memory_node", False: "rewrite_answer_node"},
 )
 graph.add_edge("rewrite_answer_node", "is_answer_relevant_node")
+graph.add_conditional_edges(
+    "memory_node",
+    memory_summary_condition,
+    {
+        "summarize": "modify_short_term_memory_node",
+        "end": END
+    }
+)
+graph.add_edge("modify_short_term_memory_node", END)
 
 workflow = graph.compile(checkpointer=ck_ptr)
 
-graph_png_bytes = workflow.get_graph().draw_mermaid_png()
-
-with open("workflow_image.png", "wb") as f:
-    f.write(graph_png_bytes)
+try:
+    graph_png_bytes = workflow.get_graph().draw_mermaid_png()
+    with open("workflow_image.png", "wb") as f:
+        f.write(graph_png_bytes)
+except Exception as e:
+    print(f"Skipping workflow_image.png generation: {e}")

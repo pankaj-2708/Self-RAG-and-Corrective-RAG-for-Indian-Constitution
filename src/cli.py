@@ -1,3 +1,5 @@
+# 
+
 import os
 import warnings
 import logging
@@ -10,7 +12,7 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
 logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
-from workflow import workflow
+from workflow import workflow,ck_ptr
 import argparse
 import uuid
 from rich.console import Console
@@ -41,16 +43,26 @@ if __name__ == "__main__":
             console.print(Panel.fit(f"[bold yellow]Started a new session with thread ID:[/bold yellow] [cyan]{thread_id}[/cyan]", border_style="yellow"))
             continue
         
-        initial_state = {
-            "user_query": human,
-            "k": 2,
-            "max_retry_for_groundness_checking": 1,
-            "max_retry_for_answer_relevant_checking": 1,
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "retrieved_contexts":[],
-            "relevant_contexts":[]
-        }
+        if ck_ptr.get_tuple({"configurable": {"thread_id": thread_id}}):
+            # if conv already exisist
+            initial_state = {
+                "user_query": human,
+                "k": 2,
+                "max_retry_for_groundness_checking": 1,
+                "max_retry_for_answer_relevant_checking": 1
+            }
+        else:
+            initial_state = {
+                "user_query": human,
+                "k": 2,
+                "max_retry_for_groundness_checking": 1,
+                "max_retry_for_answer_relevant_checking": 1,
+                "max_turns_before_summarisation": 2,
+                "messages_to_include": 0,
+                "input_tokens": 0,
+                "output_tokens": 0
+            }
+
 
         start_time = time.time()
         with Progress(

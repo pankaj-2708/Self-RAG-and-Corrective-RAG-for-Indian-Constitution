@@ -9,6 +9,11 @@ def deduplicate_reducer(existing: List[str], new: List[str]) -> List[str]:
         existing = []
     if new is None:
         new = []
+
+    # to reset after turn
+    if new[0] == "-1":
+        return []
+
     return list(dict.fromkeys(existing + new))
 
 
@@ -31,5 +36,9 @@ class schema(TypedDict):
     max_retry_for_groundness_checking: Optional[int] = Field(default=3)
     max_retry_for_answer_relevant_checking: Optional[int] = Field(default=2)
     messages: List[BaseMessage]
+    local_memory_summary: Optional[str]
+    max_turns_before_summarisation: Optional[int]
+    turns_until_summary_update: Optional[int]
+    messages_to_include: Optional[int]
     input_tokens: Annotated[int, operator.add]
     output_tokens: Annotated[int, operator.add]
