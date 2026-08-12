@@ -1,7 +1,7 @@
 
-import sqlite3
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from contextlib import asynccontextmanager
 
 from workflow.state import schema
 from workflow.nodes import (
@@ -21,9 +21,6 @@ tracer_provider = register(
   project_name="constitution",
   auto_instrument=True 
 )
-
-conn = sqlite3.connect("statedb.db", check_same_thread=False)
-ck_ptr = SqliteSaver(conn=conn)
 
 graph = StateGraph(state_schema=schema)
 
@@ -97,10 +94,16 @@ graph.add_conditional_edges(
 )
 graph.add_edge("modify_short_term_memory_node", END)
 
-workflow = graph.compile(checkpointer=ck_ptr)
+@asynccontextmanager
+async def get_workflow(db_path: str = "statedb.db"):
+    async with AsyncSqliteSaver.from_conn_string(db_path) as ck_ptr:
+        workflow = graph.compile(checkpointer=ck_ptr)
+        yield workflow, ck_ptr
 
+# Try compiling a checkpointer-less workflow just for drawing the mermaid graph
 try:
-    graph_png_bytes = workflow.get_graph().draw_mermaid_png()
+    _temp_workflow = graph.compile()
+    graph_png_bytes = _temp_workflow.get_graph().draw_mermaid_png()
     with open("workflow_image.png", "wb") as f:
         f.write(graph_png_bytes)
 except Exception as e:

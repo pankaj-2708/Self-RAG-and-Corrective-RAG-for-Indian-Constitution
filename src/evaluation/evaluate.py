@@ -93,8 +93,8 @@ app = graph.compile()
 # Load evaluation data via pandas
 df = pd.read_csv(test_set_path)
 
-def run_langgraph_rag(user_query, app, pbar=None):
-    def _run():
+async def run_langgraph_rag(user_query, app, pbar=None):
+    async def _run():
         state_updates = {
             "relevant_contexts": [],
             "generated_response": "",
@@ -107,7 +107,7 @@ def run_langgraph_rag(user_query, app, pbar=None):
             "retrieval_method": None,
             "web_searched": False
         }
-        for chunk in app.stream({
+        async for chunk in app.astream({
             "user_query": user_query,
             "k": 2,
             "max_retry_for_groundness_checking": 1,
@@ -158,10 +158,10 @@ def run_langgraph_rag(user_query, app, pbar=None):
         return state_updates
 
     try:
-        res = _run()
+        res = await _run()
     except (ValidationError, OutputParserException) as e:
         print(f"\n[Warning] Encountered validation/parsing error: {e}. Retrying once...")
-        res = _run()
+        res = await _run()
     
     # Extract text content of context messages (due to add_messages annotation in the state schema)
     contexts_raw = res.get('relevant_contexts', [])
@@ -231,7 +231,8 @@ for _, row in pbar:
     ground_truth = row["reference"] 
     
     tqdm.write(f"Processing query: {question}")
-    answer, contexts, metadata = run_langgraph_rag(question, app, pbar)
+    import asyncio
+    answer, contexts, metadata = asyncio.run(run_langgraph_rag(question, app, pbar))
     
     evaluation_data.append({
         "question": question,

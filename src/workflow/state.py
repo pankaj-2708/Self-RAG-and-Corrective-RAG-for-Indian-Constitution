@@ -11,7 +11,7 @@ def deduplicate_reducer(existing: List[str], new: List[str]) -> List[str]:
         new = []
 
     # to reset after turn
-    if new[0] == "-1":
+    if len(new)!=0 and new[0] == "-1":
         return []
 
     return list(dict.fromkeys(existing + new))

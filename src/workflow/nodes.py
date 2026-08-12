@@ -47,18 +47,18 @@ def _extract_r1_text(content) -> str:
         return " ".join(parts).strip()
     return content  # plain string — other models
 
-def retrieval_decider_node(state: schema):
+async def retrieval_decider_node(state: schema):
     inp = [
         SystemMessage(content=sys_prompt_for_retrieval_decider_node),
         HumanMessage(content=f"User Query - {state['user_query']}"),
     ]
-    response = retrieval_decider_model.invoke(inp)
+    response = await retrieval_decider_model.ainvoke(inp)
     usage = response.usage_metadata or {}
     # R1 via Bedrock returns content as a list of dicts — extract only the 'text' block
     content = _extract_r1_text(response.content)
-    res = parser_for_retrieval_decider_node.invoke(
+    res = (await parser_for_retrieval_decider_node.ainvoke(
         content
-    ).retrieval_required
+    )).retrieval_required
     return {
         "retrieval_required": res,
         "input_tokens": usage.get("input_tokens", 0),
@@ -68,14 +68,14 @@ def retrieval_decider_node(state: schema):
             "relevant_contexts":["-1"]
     }
 
-def generate_retriever_query_node(state: schema):
+async def generate_retriever_query_node(state: schema):
     inp = [
         SystemMessage(content=sys_prompt_for_retriever_query_node),
         HumanMessage(content=f"User Query - {state['user_query']}"),
     ]
-    response = query_gen_model.invoke(inp)
+    response = await query_gen_model.ainvoke(inp)
     usage = response.usage_metadata or {}
-    res = parser_for_retriever_query_node.invoke(
+    res = await parser_for_retriever_query_node.ainvoke(
         response.content
     )
     # Explicit check to enforce at most 3 queries
@@ -106,7 +106,7 @@ def fanout_retrieve_node(state: schema):
     
     return lst
 
-def retrieve_node(inp):
+async def retrieve_node(inp):
     global vector_store
     
     q_item = inp.get("query_item")
@@ -128,9 +128,9 @@ def retrieve_node(inp):
         filter_dict = {"Section": str(number).strip()}
         
     if filter_dict:
-        retrieved_contexts = vector_store.similarity_search(query_str, k=k_val, filter=filter_dict)
+        retrieved_contexts = await vector_store.asimilarity_search(query_str, k=k_val, filter=filter_dict)
     else:
-        retrieved_contexts = vector_store.similarity_search(query_str, k=k_val)
+        retrieved_contexts = await vector_store.asimilarity_search(query_str, k=k_val)
         
     for doc in retrieved_contexts:
         if doc.page_content not in seen:
@@ -146,7 +146,7 @@ def aggregate_retrieval(state: schema):
     return {}
     
 
-def direct_generation_node(state: schema):
+async def direct_generation_node(state: schema):
     summary = state.get("local_memory_summary") or ""
     history_msgs = state.get("messages") or []
     msgs_to_include = state.get("messages_to_include") or 0
@@ -160,7 +160,7 @@ def direct_generation_node(state: schema):
     prompt_msgs.extend(recent_history)
     prompt_msgs.append(HumanMessage(content=state["user_query"]))
     
-    response = generation_model.invoke(prompt_msgs)
+    response = await generation_model.ainvoke(prompt_msgs)
     usage = response.usage_metadata or {}
     return {
         "generated_response": _extract_r1_text(response.content),
@@ -185,15 +185,15 @@ def fanout_relevant_node(state:schema):
     
     return lst
 
-def is_relevant_node(inp):
+async def is_relevant_node(inp):
     sys_prompt = SystemMessage(content=sys_prompt_for_is_relevant_node)
     hmn_prompt = f"Query - {inp['user_query']}" + f"\n Context - \n {inp['context']}"
 
-    response = decision_model.invoke(
+    response = await decision_model.ainvoke(
         [sys_prompt, HumanMessage(content=hmn_prompt)]
     )
     usage = response.usage_metadata or {}
-    res = parser_for_is_relevant_node.invoke(response.content)
+    res = await parser_for_is_relevant_node.ainvoke(response.content)
     
     out = {
         "input_tokens": usage.get("input_tokens", 0),
@@ -207,7 +207,7 @@ def aggregate_relevance(state):
     # Deduplication is now handled by the custom state reducer.
     return {}
 
-def answer_from_context_node(state: schema):
+async def answer_from_context_node(state: schema):
     contexts = state["relevant_contexts"]
     sys_prompt = SystemMessage(content=sys_prompt_for_answer_from_context_node)
     msgs_to_include = state.get("messages_to_include") or 0
@@ -237,20 +237,20 @@ def answer_from_context_node(state: schema):
     )
     inp = [sys_prompt, hmn_prompt]
 
-    response = context_answer_model.invoke(inp)
+    response = await context_answer_model.ainvoke(inp)
     usage = response.usage_metadata or {}
     # R1 via Bedrock returns content as a list of dicts — extract only the 'text' block
     content = _extract_r1_text(response.content)
-    res = parser_for_answer_from_context_node.invoke(
+    res = (await parser_for_answer_from_context_node.ainvoke(
         content
-    ).response
+    )).response
     return {
         "generated_response": res,
         "input_tokens": usage.get("input_tokens", 0),
         "output_tokens": usage.get("output_tokens", 0)
     }
 
-def check_answer_grounded_node(state: schema):
+async def check_answer_grounded_node(state: schema):
 
     if state['max_retry_for_groundness_checking'] <= 0:
         return {
@@ -271,9 +271,9 @@ def check_answer_grounded_node(state: schema):
         content=f"Answer - {state['generated_response']} \n Contexts - {context}"
     )
 
-    response = grounding_model.invoke([sys_prompt, human_pr])
+    response = await grounding_model.ainvoke([sys_prompt, human_pr])
     usage = response.usage_metadata or {}
-    res = parser_for_schema_for_check_answer_grounded_node.invoke(
+    res = await parser_for_schema_for_check_answer_grounded_node.ainvoke(
         response.content
     )
 
@@ -284,7 +284,7 @@ def check_answer_grounded_node(state: schema):
         "output_tokens": usage.get("output_tokens", 0)
     }
 
-def revise_answer_node(state: schema):
+async def revise_answer_node(state: schema):
     if state['max_retry_for_answer_relevant_checking'] <= 0:
         return {
             # because max_retry_for_answer_relevant_checking =0 so even if answer is not relevant we are not going to modify it so there is no sense of checking here
@@ -307,11 +307,11 @@ def revise_answer_node(state: schema):
         content=f"""Query - {user_query} \n\n Generated Response - {generated_response} \n\n Contexts - {context} \n\n Evidence - {evidence}"""
     )
 
-    response = critic_model.invoke([sys_prompt, human_pr])
+    response = await critic_model.ainvoke([sys_prompt, human_pr])
     usage = response.usage_metadata or {}
     # R1 via Bedrock returns content as a list of dicts — extract only the 'text' block
     content = _extract_r1_text(response.content)
-    revised_answer = parser_for_revise_answer_node.invoke(
+    revised_answer = await parser_for_revise_answer_node.ainvoke(
         content
     )
 
@@ -322,7 +322,7 @@ def revise_answer_node(state: schema):
         "output_tokens": usage.get("output_tokens", 0)
     }
 
-def is_answer_relevant_node(state: schema):
+async def is_answer_relevant_node(state: schema):
     if state['max_retry_for_answer_relevant_checking'] <= 0:
         return {
             # because max_retry_for_answer_relevant_checking =0 so even if answer is not relevant we are not going to modify it so there is no sense of checking here
@@ -339,11 +339,11 @@ def is_answer_relevant_node(state: schema):
         content=f"Query - {user_query} \n\n Generated Response - {generated_response}"
     )
 
-    response = judge_model.invoke([sys_prompt, human_pr])
+    response = await judge_model.ainvoke([sys_prompt, human_pr])
     usage = response.usage_metadata or {}
     # R1 via Bedrock returns content as a list of dicts — extract only the 'text' block
     content = _extract_r1_text(response.content)
-    res = parser_for_is_answer_relevant_node.invoke(content)
+    res = await parser_for_is_answer_relevant_node.ainvoke(content)
     return {
         "is_answer_relevant": res.is_relevant,
         "relevance_explanation": res.explanation,
@@ -351,7 +351,7 @@ def is_answer_relevant_node(state: schema):
         "output_tokens": usage.get("output_tokens", 0)
     }
 
-def rewrite_answer_node(state: schema):
+async def rewrite_answer_node(state: schema):
     contexts = state["relevant_contexts"]
     context = ""
     for i in contexts:
@@ -367,11 +367,11 @@ def rewrite_answer_node(state: schema):
         content=f"""Query - {user_query} \n\n Previous Answer - {generated_response} \n\n Contexts - {context} \n\n Relevance Explanation - {relevance_explanation}"""
     )
 
-    response = answer_rewrite_model.invoke([sys_prompt, human_pr])
+    response = await answer_rewrite_model.ainvoke([sys_prompt, human_pr])
     usage = response.usage_metadata or {}
     # R1 via Bedrock returns content as a list of dicts — extract only the 'text' block
     content = _extract_r1_text(response.content)
-    res = parser_for_rewrite_answer_node.invoke(content)
+    res = await parser_for_rewrite_answer_node.ainvoke(content)
     return {
         "generated_response": res.rewritten_response,
         "max_retry_for_answer_relevant_checking": state["max_retry_for_answer_relevant_checking"] - 1,
@@ -379,40 +379,46 @@ def rewrite_answer_node(state: schema):
         "output_tokens": usage.get("output_tokens", 0)
     }
 
-def generate_web_search_query_node(state: schema):
+async def generate_web_search_query_node(state: schema):
     inp = [
         SystemMessage(content=sys_prompt_for_web_search_query_node),
         HumanMessage(content=f"User Query - {state['user_query']}"),
     ]
-    response = query_gen_model.invoke(inp)
+    response = await query_gen_model.ainvoke(inp)
     usage = response.usage_metadata or {}
-    res = parser_for_web_search_query_node.invoke(
+    res = (await parser_for_web_search_query_node.ainvoke(
         response.content
-    ).web_search_queries[:3]
+    )).web_search_queries[:3]
     return {
         "web_search_queries": res,
         "input_tokens": usage.get("input_tokens", 0),
         "output_tokens": usage.get("output_tokens", 0)
     }
 
-def web_search_node(state: schema):
+async def web_search_node(state: schema):
     queries = state.get("web_search_queries") or [state["user_query"]]
     if not queries:
         queries = [state["user_query"]]
     
+    async def run_search(query):
+        try:
+            x = await tavily_tool.ainvoke(query)
+            return x.get("results", [])
+        except Exception as e:
+            print(f"Error querying Tavily for '{query}': {e}")
+            return []
+            
+    import asyncio
+    results_list = await asyncio.gather(*(run_search(q) for q in queries))
+    
     res = []
     seen_urls = set()
-    for query in queries:
-        try:
-            x = tavily_tool.invoke(query)
-            for r in x.get("results", []):
-                if r['url'] not in seen_urls:
-                    seen_urls.add(r['url'])
-                    p = f"Source - {r['url']} \n title - {r['title']} \n {r['content']}"
-                    res.append(p)
-        except Exception as e:
-            # Print/log the exception and keep going with other queries
-            print(f"Error querying Tavily for '{query}': {e}")
+    for results in results_list:
+        for r in results:
+            if r['url'] not in seen_urls:
+                seen_urls.add(r['url'])
+                p = f"Source - {r['url']} \n title - {r['title']} \n {r['content']}"
+                res.append(p)
     return {"relevant_contexts": res, "web_searched": True}
 
 def memory_node(state: schema):
@@ -443,7 +449,7 @@ def memory_node(state: schema):
         "messages_to_include": new_messages_to_inc
     }
 
-def modify_short_term_memory_node(state: schema):
+async def modify_short_term_memory_node(state: schema):
     summary = state.get("local_memory_summary") or "No prior summary."
     messages = state.get("messages") or []
     max_turns = state.get("max_turns_before_summarisation") or 2
@@ -460,7 +466,7 @@ def modify_short_term_memory_node(state: schema):
         HumanMessage(content=f"Existing Summary:\n{summary}\n\nNew Conversation Turns:\n{recent_conv_str}\n\nPlease generate the updated consolidated summary:")
     ]
     
-    response = generation_model.invoke(prompt)
+    response = await generation_model.ainvoke(prompt)
     usage = response.usage_metadata or {}
     updated_summary = _extract_r1_text(response.content)
     
