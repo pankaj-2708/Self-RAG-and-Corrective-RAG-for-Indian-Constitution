@@ -1,0 +1,7 @@
+pipeline_defaults:
+  # Defaults passed to the LangGraph workflow for every new and existing conversation
+  k: 2
+  max_retry_for_groundness_checking: 1
+  max_retry_for_answer_relevant_checking: 1
+  max_turns_before_summarisation: 2
+  messages_to_include: 0
