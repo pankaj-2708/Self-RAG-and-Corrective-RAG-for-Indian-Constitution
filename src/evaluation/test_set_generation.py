@@ -10,6 +10,10 @@ PARAMS_PATH = os.path.abspath(os.path.join(DATA_DIR, "../params.yaml"))
 with open(PARAMS_PATH, "r") as f:
     params = yaml.safe_load(f)["test_set_generation"]
 
+CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.yaml")
+with open(CONFIG_PATH, "r") as f:
+    eval_config = yaml.safe_load(f)
+
 generate_test_set = params.get("generate_test_set", True)
 test_size = params.get("test_size", 50)
 
@@ -41,14 +45,14 @@ load_dotenv()
 kg_path = os.path.join(DATA_DIR, "knowledge_graph.json")
 test_set_path = os.path.join(DATA_DIR, "test_set.csv")
 
-generator_embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+generator_embeddings = HuggingFaceEmbeddings(model_name=eval_config["embeddings"]["model_name"])
 generator_embeddings = LangchainEmbeddingsWrapper(generator_embeddings)
 
 generator_llm = ChatBedrockConverse(
-    model="deepseek.v3.2",
+    model=eval_config["models"]["llm_model_id"],
     api_key=os.environ['AWS_BEARER_TOKEN_BEDROCK'],
-    region_name="us-east-1",
-    temperature=0,
+    region_name=eval_config["models"]["region"],
+    temperature=eval_config["models"]["llm_temperature"],
   )
 
 generator_llm = LangchainLLMWrapper(generator_llm)

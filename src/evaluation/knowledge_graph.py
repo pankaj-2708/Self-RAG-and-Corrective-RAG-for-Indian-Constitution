@@ -11,6 +11,10 @@ kg_path = os.path.join(DATA_DIR, "knowledge_graph.json")
 with open(PARAMS_PATH, "r") as f:
     params = yaml.safe_load(f)["knowledge_graph"]
 
+CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.yaml")
+with open(CONFIG_PATH, "r") as f:
+    eval_config = yaml.safe_load(f)
+
 create_knowledge_graph = params.get("create_knowledge_graph", True)
 
 if not create_knowledge_graph:
@@ -55,14 +59,14 @@ if not os.environ.get('AWS_BEARER_TOKEN_BEDROCK'):
 sampled_df_path = os.path.join(DATA_DIR, "sampled_df.csv")
     
 
-generator_embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+generator_embeddings = HuggingFaceEmbeddings(model_name=eval_config["embeddings"]["model_name"])
 generator_embeddings = LangchainEmbeddingsWrapper(generator_embeddings)
 
 generator_llm = ChatBedrockConverse(
-    model="deepseek.v3.2",
+    model=eval_config["models"]["llm_model_id"],
     api_key=os.environ['AWS_BEARER_TOKEN_BEDROCK'],
-    region_name="us-east-1",
-    temperature=0,
+    region_name=eval_config["models"]["region"],
+    temperature=eval_config["models"]["llm_temperature"],
 )
 generator_llm = LangchainLLMWrapper(generator_llm)
 
@@ -77,12 +81,13 @@ for i in range(sampled_df.shape[0]):
         )
     )
 
+rc = eval_config["knowledge_graph"]["run_config"]
 my_run_config = RunConfig(
-    max_workers=10,      
-    timeout=180,
-    max_retries=10,
-    max_wait=60,
-    log_tenacity=True,
+    max_workers=rc["max_workers"],      
+    timeout=rc["timeout"],
+    max_retries=rc["max_retries"],
+    max_wait=rc["max_wait"],
+    log_tenacity=rc["log_tenacity"],
 )
 
 # if os.path.isfile(kg_path):

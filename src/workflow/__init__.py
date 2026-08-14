@@ -1,7 +1,25 @@
+import os
+import sys
+sys.path.append(
+    os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+        )
+    )
+)
 
+import os
+import yaml
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from contextlib import asynccontextmanager
+
+# ── Load workflow config ───────────────────────────────────────────────────────
+_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
+with open(_CONFIG_PATH, "r") as _f:
+    _cfg = yaml.safe_load(_f)
+_DEFAULT_DB_PATH = _cfg["workflow"]["db_path"]
 
 from workflow.state import schema
 from workflow.nodes import (
@@ -16,11 +34,15 @@ from workflow.edges import (
     is_grounded_condition, is_answer_relevant_condition, memory_summary_condition
 )
 
-from phoenix.otel import register
-tracer_provider = register(
-  project_name="constitution",
-  auto_instrument=True 
-)
+if not os.getenv("LANGSMITH_API_KEY") and not os.getenv("LANGCHAIN_API_KEY"):
+    try:
+        from phoenix.otel import register
+        tracer_provider = register(
+            project_name="constitution",
+            auto_instrument=True 
+        )
+    except ImportError:
+        pass
 
 graph = StateGraph(state_schema=schema)
 
@@ -95,7 +117,9 @@ graph.add_conditional_edges(
 graph.add_edge("modify_short_term_memory_node", END)
 
 @asynccontextmanager
-async def get_workflow(db_path: str = "statedb.db"):
+async def get_workflow(db_path: str = None):
+    if db_path is None:
+        db_path = _DEFAULT_DB_PATH
     async with AsyncSqliteSaver.from_conn_string(db_path) as ck_ptr:
         workflow = graph.compile(checkpointer=ck_ptr)
         yield workflow, ck_ptr

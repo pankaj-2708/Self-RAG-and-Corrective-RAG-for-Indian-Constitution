@@ -1,0 +1,46 @@
+models:
+  # AWS Bedrock region for all LLM calls
+  region: "us-east-1"
+
+  # DeepSeek V3 — fast generation & structured-output tasks
+  v3_model_id: "deepseek.v3.2"
+
+  # DeepSeek R1 — chain-of-thought reasoning tasks
+  # Temperature must be exactly 1 on Bedrock for R1
+  r1_model_id: "us.deepseek.r1-v1:0"
+  r1_temperature: 1
+
+  # Per-task temperatures for V3 models
+  decision_temperature: 0.0       # relevance / grounding binary checks
+  query_gen_temperature: 0.4      # sub-query & web-query generation
+  generation_temperature: 0.7     # open-ended direct generation
+  grounding_temperature: 0.0      # grounding verification (strict)
+
+embeddings:
+  model_name: "amazon.titan-embed-text-v2:0"
+
+vector_store:
+  collection_name: "constitution_and_ipc"
+  # Path is relative to the project root; config.py resolves it to an absolute path
+  persist_directory: "data/constitution_and_ipc.chroma"
+
+retriever:
+  search_type: "similarity"
+  k: 3                            # number of docs returned per similarity search
+
+web_search:
+  max_results: 2                  # Tavily results per query
+
+workflow:
+  db_path: "statedb.db"           # SQLite checkpoint database (relative to project root)
+
+pipeline_defaults:
+  # These are the defaults used by cli.py and Backend/main.py when starting a new thread
+  k: 2
+  max_retry_for_groundness_checking: 1
+  max_retry_for_answer_relevant_checking: 1
+  max_turns_before_summarisation: 2
+  messages_to_include: 0
+
+observability:
+  phoenix_project_name: "constitution"

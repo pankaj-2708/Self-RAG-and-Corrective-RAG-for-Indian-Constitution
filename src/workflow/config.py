@@ -1,83 +1,87 @@
 from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_aws import ChatBedrockConverse
+from langchain_aws import ChatBedrockConverse, BedrockEmbeddings
 from langchain_tavily import TavilySearch
 from dotenv import load_dotenv
 import os
+import yaml
 
 load_dotenv()
 
-if not os.environ.get('AWS_BEARER_TOKEN_BEDROCK'):
+# ── Load config ────────────────────────────────────────────────────────────────
+_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
+with open(_CONFIG_PATH, "r") as _f:
+    _cfg = yaml.safe_load(_f)
+
+_models   = _cfg["models"]
+_emb      = _cfg["embeddings"]
+_vs       = _cfg["vector_store"]
+_ret      = _cfg["retriever"]
+_ws       = _cfg["web_search"]
+
+# ── AWS auth ───────────────────────────────────────────────────────────────────
+if not os.environ.get("AWS_BEARER_TOKEN_BEDROCK"):
     raise ValueError("No AWS bearer token for Bedrock")
-else:
-    AWS_BEARER_TOKEN_BEDROCK = os.environ['AWS_BEARER_TOKEN_BEDROCK']
+AWS_BEARER_TOKEN_BEDROCK = os.environ["AWS_BEARER_TOKEN_BEDROCK"]
 
-# Models
-model_name = "sentence-transformers/all-mpnet-base-v2"
-embeddings = HuggingFaceEmbeddings(model_name=model_name)
+# ── Embeddings ─────────────────────────────────────────────────────────────────
+embeddings = BedrockEmbeddings(model_id=_emb["model_name"], region_name=_models["region"])
 
-# Shared Bedrock kwargs — DeepSeek V3
+# ── Shared Bedrock kwargs ──────────────────────────────────────────────────────
 _bedrock_kwargs = dict(
-    model="deepseek.v3.2",
+    model=_models["v3_model_id"],
     api_key=AWS_BEARER_TOKEN_BEDROCK,
-    region_name="us-east-1",
+    region_name=_models["region"],
 )
 
-# Shared Bedrock kwargs — DeepSeek R1 (reasoning model)
-# R1 controls reasoning internally; temperature must be 1 on Bedrock
+# DeepSeek R1 (reasoning model) — temperature must be 1 on Bedrock
 _r1_kwargs = dict(
-    model="us.deepseek.r1-v1:0",
+    model=_models["r1_model_id"],
     api_key=AWS_BEARER_TOKEN_BEDROCK,
-    region_name="us-east-1",
+    region_name=_models["region"],
 )
 
-# --- Task-specific models (previously all main_model) ---
+# ── Task-specific models ───────────────────────────────────────────────────────
 
-# For routing the query: retrieval / web_search / None
-# R1's chain-of-thought reasoning handles complex tiebreaker rules
-retrieval_decider_model = ChatBedrockConverse(**_r1_kwargs, temperature=1)
+# Routing: retrieval / web_search / None  — R1 chain-of-thought for tiebreaker rules
+retrieval_decider_model = ChatBedrockConverse(**_r1_kwargs, temperature=_models["r1_temperature"])
 
-# For binary relevance check on each retrieved chunk (runs N times per query)
-# V3 is sufficient and much cheaper for this simple entailment task
-decision_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.0)
+# Binary relevance check per chunk — V3 sufficient and cheaper for simple entailment
+decision_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=_models["decision_temperature"])
 
-# For generating retriever & web-search queries
-# Moderate temp → some variety in query formulation
-query_gen_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.4)
+# Sub-query & web-query generation — moderate temp for variety
+query_gen_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=_models["query_gen_temperature"])
 
-# For open-ended answer generation: direct_generation
-# Higher temp → natural, fluent responses
-generation_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.7)
+# Open-ended direct generation — higher temp for fluency
+generation_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=_models["generation_temperature"])
 
-# For answer_from_context: R1's chain-of-thought reasoning produces
-# more grounded, well-reasoned answers from retrieved context
-# R1 controls reasoning internally; temperature must be 1 on Bedrock
-context_answer_model = ChatBedrockConverse(**_r1_kwargs, temperature=1)
+# Answer from context — R1 chain-of-thought for grounded, well-reasoned answers
+context_answer_model = ChatBedrockConverse(**_r1_kwargs, temperature=_models["r1_temperature"])
 
-# For groundedness verification: check_answer_grounded
-# Zero temp → strict, factual evaluation
-grounding_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=0.0)
+# Groundedness verification — zero temp for strict factual evaluation
+grounding_model = ChatBedrockConverse(**_bedrock_kwargs, temperature=_models["grounding_temperature"])
 
+# Answer rewriter — R1 for better targeted rewrites
+answer_rewrite_model = ChatBedrockConverse(**_r1_kwargs, temperature=_models["r1_temperature"])
 
-# Rewrites answers to better address the user's query
-# R1's chain-of-thought reasoning produces better targeted rewrites
-answer_rewrite_model = ChatBedrockConverse(**_r1_kwargs, temperature=1)
+# Relevance judge — R1 to catch subtle relevance issues
+judge_model = ChatBedrockConverse(**_r1_kwargs, temperature=_models["r1_temperature"])
 
-# Judges whether an answer is relevant to the user's query
-# R1's reasoning helps catch subtle relevance issues
-judge_model = ChatBedrockConverse(**_r1_kwargs, temperature=1)
+# Grounding critic — R1 for accurate revisions of ungrounded answers
+critic_model = ChatBedrockConverse(**_r1_kwargs, temperature=_models["r1_temperature"])
 
-# Revises/improves an answer that failed grounding
-# R1's chain-of-thought reasoning produces more accurate revisions
-critic_model = ChatBedrockConverse(**_r1_kwargs, temperature=1)
-
-# vector_store
+# ── Vector store ───────────────────────────────────────────────────────────────
+_vs_path = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", _vs["persist_directory"])
+)
 vector_store = Chroma(
-    collection_name="constitution_and_ipc",
-    persist_directory="C:\\Users\\panka\\genai_project\\constitution_rag\\data\\constitution_and_ipc.chroma",
+    collection_name=_vs["collection_name"],
+    persist_directory=_vs_path,
     embedding_function=embeddings,
 )
-retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 3})
+retriever = vector_store.as_retriever(
+    search_type=_ret["search_type"],
+    search_kwargs={"k": _ret["k"]},
+)
 
-# search tools
-tavily_tool = TavilySearch(max_results=2)
+# ── Web search ─────────────────────────────────────────────────────────────────
+tavily_tool = TavilySearch(max_results=_ws["max_results"])

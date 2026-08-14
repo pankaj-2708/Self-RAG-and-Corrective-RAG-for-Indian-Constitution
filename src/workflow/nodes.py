@@ -28,7 +28,8 @@ from workflow.prompts import (
     sys_prompt_for_rewrite_answer_node,
     sys_prompt_for_retriever_query_node,
     sys_prompt_for_web_search_query_node,
-    sys_prompt_for_modify_short_term_memory_node
+    sys_prompt_for_modify_short_term_memory_node,
+    sys_prompt_for_direct_generation_node
 )
 from langgraph.types import Send
 
@@ -154,7 +155,7 @@ async def direct_generation_node(state: schema):
     num_msgs = msgs_to_include * 2
     recent_history = history_msgs[-num_msgs:] if (num_msgs > 0 and history_msgs) else []
     
-    prompt_msgs = []
+    prompt_msgs = [SystemMessage(content=sys_prompt_for_direct_generation_node)]
     if summary:
         prompt_msgs.append(SystemMessage(content=f"Prior Conversation Summary:\n{summary}"))
     prompt_msgs.extend(recent_history)

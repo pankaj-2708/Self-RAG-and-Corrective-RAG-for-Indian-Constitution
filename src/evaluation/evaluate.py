@@ -10,6 +10,10 @@ PARAMS_PATH = os.path.abspath(os.path.join(DATA_DIR, "../params.yaml"))
 with open(PARAMS_PATH, "r") as f:
     params = yaml.safe_load(f)["evaluate"]
 
+CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.yaml")
+with open(CONFIG_PATH, "r") as f:
+    eval_config = yaml.safe_load(f)
+
 evaluate_rag = params.get("evaluate_rag", True)
 
 if not evaluate_rag:
@@ -18,7 +22,7 @@ if not evaluate_rag:
 
 from phoenix.otel import register
 tracer_provider = register(
-  project_name="constitution",
+  project_name=eval_config["observability"]["phoenix_project_name"],
   auto_instrument=True 
 )
 
@@ -76,15 +80,15 @@ results_path = os.path.join(RESULTS_DIR, f"results_v{next_version}.csv")
 
 # Initialize evaluator LLM and wrap it for Ragas 0.4.x
 evaluater_llm = ChatBedrockConverse(
-    model="deepseek.v3.2",
+    model=eval_config["models"]["llm_model_id"],
     api_key=os.environ['AWS_BEARER_TOKEN_BEDROCK'],
-    region_name="us-east-1",
-    temperature=0,
+    region_name=eval_config["models"]["region"],
+    temperature=eval_config["models"]["llm_temperature"],
 )
 evaluater_llm = LangchainLLMWrapper(evaluater_llm)
 
 # Initialize embedding model and wrap it for Ragas evaluation
-embeddings_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+embeddings_model = HuggingFaceEmbeddings(model_name=eval_config["embeddings"]["model_name"])
 evaluater_embeddings = LangchainEmbeddingsWrapper(embeddings_model)
 
 # Compile the LangGraph application (without checkpointer to avoid SQLite database overhead)
@@ -92,6 +96,8 @@ app = graph.compile()
 
 # Load evaluation data via pandas
 df = pd.read_csv(test_set_path)
+
+_p_defaults = eval_config["pipeline_defaults"]
 
 async def run_langgraph_rag(user_query, app, pbar=None):
     async def _run():
@@ -109,9 +115,9 @@ async def run_langgraph_rag(user_query, app, pbar=None):
         }
         async for chunk in app.astream({
             "user_query": user_query,
-            "k": 2,
-            "max_retry_for_groundness_checking": 1,
-            "max_retry_for_answer_relevant_checking": 1,
+            "k": _p_defaults["k"],
+            "max_retry_for_groundness_checking": _p_defaults["max_retry_for_groundness_checking"],
+            "max_retry_for_answer_relevant_checking": _p_defaults["max_retry_for_answer_relevant_checking"],
             "input_tokens": 0,
             "output_tokens": 0
         }, stream_mode="updates"):

@@ -1,0 +1,35 @@
+models:
+  # AWS Bedrock region for all evaluation LLM calls
+  region: "us-east-1"
+
+  # Model used for knowledge graph construction, test set generation, and Ragas scoring
+  llm_model_id: "deepseek.v3.2"
+  llm_temperature: 0
+
+embeddings:
+  model_name: "sentence-transformers/all-mpnet-base-v2"
+
+clustering:
+  # K-means sweep range: k values from k_min to k_max - 1
+  k_min: 4
+  k_max: 25
+  random_state: 42
+  # Number of documents to stratified-sample (one per cluster group) for test set generation
+  sample_size: 100
+
+knowledge_graph:
+  run_config:
+    max_workers: 10
+    timeout: 180
+    max_retries: 10
+    max_wait: 60
+    log_tenacity: true
+
+pipeline_defaults:
+  # Defaults used when running the RAG pipeline inside evaluate.py
+  k: 2
+  max_retry_for_groundness_checking: 1
+  max_retry_for_answer_relevant_checking: 1
+
+observability:
+  phoenix_project_name: "constitution"
