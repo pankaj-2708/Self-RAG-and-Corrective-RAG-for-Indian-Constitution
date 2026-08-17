@@ -1,0 +1,72 @@
+name: CI CD pipeline
+on:
+    push
+
+jobs:
+    build_image_and_push_to_ecr:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout Repository
+          uses: actions/checkout@v3
+
+        - name: Configure Aws credentials
+          uses: aws-actions/configure-aws-credentials@v4
+          with:
+              aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+              aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+              aws-region: ${{ secrets.AWS_REGION }}
+
+        - name: Login to Amazon ECR
+          id: login-ecr
+          uses: aws-actions/amazon-ecr-login@v2
+        
+        - name: build_docker_image
+          id: build-image
+          env:
+            ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+            ECR_REPOSITORY_BACKEND: ${{ secrets.ECR_REPOSITORY_BACKEND }}
+            ECR_REPOSITORY_FRONTEND: ${{ secrets.ECR_REPOSITORY_FRONTEND }}
+            IMAGE_TAG: latest
+          run: |
+            docker build -f ./Backend/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG .
+            docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG
+            echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+            docker build -f ./frontend/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG .
+            docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG
+            echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+    deploy:
+        needs: build_image_and_push_to_ecr
+        runs-on: self-hosted
+
+        steps:
+            - name: checkout repo
+              uses: actions/checkout@v3
+            
+            - name: Configure Aws credentials
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                    aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                    aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                    aws-region: ${{ secrets.AWS_REGION }}
+
+            - name: Login to Amazon ECR
+              id: login-ecr
+              uses: aws-actions/amazon-ecr-login@v2
+
+            - name: run docker compose
+              env:
+                BACKEND_IMAGE: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_BACKEND }}:latest
+                FRONTEND_IMAGE: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_FRONTEND }}:latest
+                LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+                AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+                TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+                LANGSMITH_ENDPOINT: ${{ secrets.LANGSMITH_ENDPOINT }}
+                LANGSMITH_PROJECT: ${{ secrets.LANGSMITH_PROJECT }}
+                LANGSMITH_TRACING_V2: ${{ secrets.LANGSMITH_TRACING_V2 }}
+                BACKEND_URL: ${{ secrets.BACKEND_URL }}
+              run: |  
+                docker compose down
+                docker compose pull
+                docker compose up -d 
