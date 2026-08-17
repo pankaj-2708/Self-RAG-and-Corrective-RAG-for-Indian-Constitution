@@ -1,0 +1,19 @@
+services:
+  backend:
+    image: ${BACKEND_IMAGE}
+    environment:
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
+      - AWS_BEARER_TOKEN_BEDROCK=${AWS_BEARER_TOKEN_BEDROCK}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - LANGSMITH_ENDPOINT=${LANGSMITH_ENDPOINT}
+      - LANGSMITH_PROJECT=${LANGSMITH_PROJECT}
+      - LANGSMITH_TRACING_V2=${LANGSMITH_TRACING_V2}
+    ports: 
+     - '8000:8000'
+
+  frontend:
+    image: ${FRONTEND_IMAGE}
+    environment:
+      - VITE_API_BASE=${BACKEND_URL}
+    ports: 
+     - '5173:5173'

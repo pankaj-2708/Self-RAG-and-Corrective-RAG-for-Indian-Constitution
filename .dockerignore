@@ -1,0 +1,47 @@
+# Git & Environment
+.git
+.gitignore
+.env
+.venv
+venv/
+env/
+
+# Python cache & build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+*.egg-info/
+dist/
+build/
+
+# IDE / Editor files
+.vscode/
+.idea/
+
+# Node / Frontend / Notebooks / Visualizations
+notebooks/
+*.png
+*.jpg
+*.jpeg
+
+# Unnecessary Data & Databases (exclude 14MB+ CSVs and state db, keep only chroma db)
+statedb.db
+data/*.csv
+data/*.json
+data/constitution_and_ipc.faiss/
+data/evaluation_progress_results/
+data/optimal_k_inertia.png
+
+# DVC
+.dvc/
+.dvcignore
+dvc.yaml
+dvc.lock
+
+# Logs & temp files
+*.log
+tmp/
+frontend_backup_20260818/
