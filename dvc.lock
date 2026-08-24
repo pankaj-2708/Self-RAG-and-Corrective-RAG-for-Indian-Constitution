@@ -1,82 +1,66 @@
 schema: '2.0'
 stages:
-  clustering:
-    cmd: python ./src/evaluation/clustering.py
+  standalone_retriever:
+    cmd: python ./evals/Component_level/0_retriever.py
     deps:
-    - path: ./data/constitution_and_ipc.chroma
+    - path: ./data/sample_test_set.csv
       hash: md5
-      md5: 20319f86d4abbc7e0b99a96b09c10d14.dir
-      size: 16279956
-      nfiles: 6
-    - path: ./src/evaluation/clustering.py
+      md5: dbec4751ec269469fd2e2a323021a39f
+      size: 1336
+    - path: ./evals/Component_level/0_retriever.py
       hash: md5
-      md5: 0c821f66e30647b83dd54ff0a6d71d2c
-      size: 2741
-    outs:
-    - path: ./data/df.csv
-      hash: md5
-      md5: 8599155de62e53a0dfc0307d7170f939
-      size: 14016185
-    - path: ./data/sampled_df.csv
-      hash: md5
-      md5: f4756c610aab61fe3afa955365db22a4
-      size: 1342558
-  knowledge_graph:
-    cmd: python ./src/evaluation/knowledge_graph.py
-    deps:
-    - path: ./data/sampled_df.csv
-      hash: md5
-      md5: f4756c610aab61fe3afa955365db22a4
-      size: 1342558
-    - path: ./src/evaluation/knowledge_graph.py
-      hash: md5
-      md5: c107a73d0c04327b05141b97cc4df5ea
-      size: 3372
+      md5: 515bd3dcf4895cf8ce29a64ef086a99c
+      size: 4539
     params:
       params.yaml:
-        knowledge_graph.create_knowledge_graph: false
+        standalone_retriever.PRECISION_THRESHOLD: 0.7
+        standalone_retriever.RECALL_THRESHOLD: 0.7
+        standalone_retriever.embeddings.model_name: amazon.titan-embed-text-v2:0
+        standalone_retriever.k: 3
+        standalone_retriever.llm_model_id: deepseek.v3.2
+        standalone_retriever.llm_temperature: 0.0
+        standalone_retriever.models.region: us-east-1
+        standalone_retriever.name: only_retriever(no query rewriting)
+        standalone_retriever.output: standalone_retriever_eval.csv
+        standalone_retriever.region: us-east-1
+        standalone_retriever.search_type: similarity
+        standalone_retriever.test_set: sample_test_set.csv
+        standalone_retriever.vector_store_collection_name: constitution_and_ipc
+        standalone_retriever.vector_store_name: constitution_and_ipc.chroma
     outs:
-    - path: ./data/knowledge_graph.json
+    - path: ./data/standalone_retriever_eval.csv
       hash: md5
-      md5: d2fc33f4d8f679f9bdc1ed5ed3ed3f9a
-      size: 3345734
-  test_set_generation:
-    cmd: python ./src/evaluation/test_set_generation.py
+      md5: 6071cd143259d220bcee20bcc90e7d6c
+      size: 4629
+  standalone_generator:
+    cmd: python ./evals/Component_level/1_generator.py
     deps:
-    - path: ./data/knowledge_graph.json
+    - path: ./data/sample_test_set.csv
       hash: md5
-      md5: d2fc33f4d8f679f9bdc1ed5ed3ed3f9a
-      size: 3345734
-    - path: ./src/evaluation/test_set_generation.py
+      md5: dbec4751ec269469fd2e2a323021a39f
+      size: 1336
+    - path: ./evals/Component_level/1_generator.py
       hash: md5
-      md5: f2c003f1d1bf220c0558cbe9b376473a
-      size: 2294
+      md5: 66ef284aa8fb743a0f0cd8734d87abc8
+      size: 5202
     params:
       params.yaml:
-        test_set_generation.generate_test_set: false
-        test_set_generation.test_size: 50
+        standalone_generator.ANSWER_RELEVANCY_THRESHOLD: 0.7
+        standalone_generator.FAITHFULNESS_THRESHOLD: 0.7
+        standalone_generator.embeddings.model_name: amazon.titan-embed-text-v2:0
+        standalone_generator.k: 3
+        standalone_generator.llm_model_id: deepseek.v3.2
+        standalone_generator.llm_temperature: 0.0
+        standalone_generator.models.region: us-east-1
+        standalone_generator.name: only_generator
+        standalone_generator.output: standalone_generator_eval.csv
+        standalone_generator.region: us-east-1
+        standalone_generator.search_type: similarity
+        standalone_generator.test_set: sample_test_set.csv
+        standalone_generator.vector_store_collection_name: constitution_and_ipc
+        standalone_generator.vector_store_name: constitution_and_ipc.chroma
     outs:
-    - path: ./data/test_set.csv
+    - path: ./data/standalone_generator_eval.csv
       hash: md5
-      md5: 94a8296eb1015bd1ba917993b363929c
-      size: 134113
-  evaluate:
-    cmd: python ./src/evaluation/evaluate.py
-    deps:
-    - path: ./data/test_set.csv
-      hash: md5
-      md5: 94a8296eb1015bd1ba917993b363929c
-      size: 134113
-    - path: ./src/evaluation/evaluate.py
-      hash: md5
-      md5: e31d67db36bea0717f60b056b9eff5c7
-      size: 14523
-    params:
-      params.yaml:
-        evaluate.evaluate_rag: true
-    outs:
-    - path: ./data/evaluation_progress_results/
-      hash: md5
-      md5: 68d0d487ba864ec8c3e19b3c5dcd7c0d.dir
-      size: 567702
-      nfiles: 3
+      md5: 610ccede65c9482bd998943141c103b2
+      size: 5541

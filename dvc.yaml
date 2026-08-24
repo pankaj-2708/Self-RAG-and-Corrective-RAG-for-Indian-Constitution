@@ -44,3 +44,30 @@ stages:
       - standalone_generator.name
     outs:
       - ./data/standalone_generator_eval.csv
+
+  pipeline_eval:
+    cmd: python ./evals/PipelineLevel/eval.py
+    deps:
+      - ./evals/PipelineLevel/eval.py
+      - ./data/sample_test_set.csv
+      - ./src/workflow
+    params:
+      - pipeline_eval.test_set
+      - pipeline_eval.output
+      - pipeline_eval.vector_store_name
+      - pipeline_eval.vector_store_collection_name
+      - pipeline_eval.search_type
+      - pipeline_eval.k
+      - pipeline_eval.embeddings.model_name
+      - pipeline_eval.models.region
+      - pipeline_eval.region
+      - pipeline_eval.llm_model_id
+      - pipeline_eval.llm_temperature
+      - pipeline_eval.RECALL_THRESHOLD
+      - pipeline_eval.PRECISION_THRESHOLD
+      - pipeline_eval.FAITHFULNESS_THRESHOLD
+      - pipeline_eval.ANSWER_RELEVANCY_THRESHOLD
+      - pipeline_eval.CONTEXTUAL_RELEVANCY_THRESHOLD
+      - pipeline_eval.name
+    outs:
+      - ./data/pipeline_eval.csv

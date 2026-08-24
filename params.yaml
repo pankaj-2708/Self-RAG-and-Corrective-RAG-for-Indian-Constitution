@@ -33,3 +33,24 @@ standalone_generator:
   FAITHFULNESS_THRESHOLD: 0.7
   ANSWER_RELEVANCY_THRESHOLD: 0.7
   name: "only_generator"
+
+pipeline_eval:
+  test_set: "sample_test_set.csv"
+  output: "pipeline_eval.csv"
+  vector_store_name: "constitution_and_ipc.chroma"
+  vector_store_collection_name: "constitution_and_ipc"
+  search_type: "similarity"
+  k: 3
+  embeddings:
+    model_name: "amazon.titan-embed-text-v2:0"
+  models:
+    region: "us-east-1"
+  region: "us-east-1"
+  llm_model_id: "deepseek.v3.2"
+  llm_temperature: 0.0
+  RECALL_THRESHOLD: 0.7
+  PRECISION_THRESHOLD: 0.7
+  FAITHFULNESS_THRESHOLD: 0.7
+  ANSWER_RELEVANCY_THRESHOLD: 0.7
+  CONTEXTUAL_RELEVANCY_THRESHOLD: 0.7
+  name: "pipeline_eval"
