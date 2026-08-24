@@ -34,7 +34,7 @@ from workflow.edges import (
     is_grounded_condition, is_answer_relevant_condition, memory_summary_condition
 )
 
-if not os.getenv("LANGSMITH_API_KEY") and not os.getenv("LANGCHAIN_API_KEY"):
+if not os.getenv("LANGSMITH_API_KEY") or os.getenv("LANGSMITH_TRACING_V2"=="false"):
     try:
         from phoenix.otel import register
         tracer_provider = register(

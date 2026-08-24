@@ -27,3 +27,6 @@ src/workflow_backup.py
 src/Backend/data/
 *.excalidraw
 frontend_backup_20260818
+.cache_ggshield
+.deepeval
+mlruns

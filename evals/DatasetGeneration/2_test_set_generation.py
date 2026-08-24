@@ -5,20 +5,17 @@ import yaml
 # Resolve paths and check execution parameter before loading heavy modules or telemetry
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../data"))
-PARAMS_PATH = os.path.abspath(os.path.join(DATA_DIR, "../params.yaml"))
-
-with open(PARAMS_PATH, "r") as f:
-    params = yaml.safe_load(f)["test_set_generation"]
 
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.yaml")
 with open(CONFIG_PATH, "r") as f:
     eval_config = yaml.safe_load(f)
 
-generate_test_set = params.get("generate_test_set", True)
-test_size = params.get("test_size", 50)
+ts_config = eval_config.get("test_set_generation", {})
+generate_test_set = ts_config.get("generate_test_set", True)
+test_size = ts_config.get("test_size", 50)
 
 if not generate_test_set:
-    print("generate_test_set is set to False in params.yaml. Exiting test set generation stage.")
+    print("generate_test_set is set to False in config.yaml. Exiting test set generation stage.")
     sys.exit(0)
 
 from phoenix.otel import register

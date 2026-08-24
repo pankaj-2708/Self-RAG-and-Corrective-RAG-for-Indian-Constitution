@@ -5,27 +5,23 @@ import yaml
 # Resolve paths and check execution parameter before loading heavy modules or telemetry
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../data"))
-PARAMS_PATH = os.path.abspath(os.path.join(DATA_DIR, "../params.yaml"))
 kg_path = os.path.join(DATA_DIR, "knowledge_graph.json")
-
-with open(PARAMS_PATH, "r") as f:
-    params = yaml.safe_load(f)["knowledge_graph"]
 
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.yaml")
 with open(CONFIG_PATH, "r") as f:
     eval_config = yaml.safe_load(f)
 
-create_knowledge_graph = params.get("create_knowledge_graph", True)
+kg_config = eval_config.get("knowledge_graph", {})
+create_knowledge_graph = kg_config.get("create_knowledge_graph", True)
 
 if not create_knowledge_graph:
-    # assuming knowledge_graph.json already exists, just rewriting it for dvc
     if os.path.exists(kg_path):
         from ragas.testset.graph import KnowledgeGraph
         kg = KnowledgeGraph().load(kg_path)
-        print(f"create_knowledge_graph is set to False in params.yaml. Loaded knowledge graph from {kg_path}")
+        print(f"create_knowledge_graph is set to False in config.yaml. Loaded knowledge graph from {kg_path}")
         kg.save(kg_path)
     else:
-        print(f"create_knowledge_graph is set to False in params.yaml and {kg_path} does not exist. Exiting.")
+        print(f"create_knowledge_graph is set to False in config.yaml and {kg_path} does not exist. Exiting.")
     sys.exit(0)
 
 from phoenix.otel import register
@@ -81,7 +77,13 @@ for i in range(sampled_df.shape[0]):
         )
     )
 
-rc = eval_config["knowledge_graph"]["run_config"]
+rc = kg_config.get("run_config", {
+    "max_workers": 10,
+    "timeout": 180,
+    "max_retries": 10,
+    "max_wait": 60,
+    "log_tenacity": True,
+})
 my_run_config = RunConfig(
     max_workers=rc["max_workers"],      
     timeout=rc["timeout"],

@@ -1,49 +1,46 @@
 stages:
-  clustering:
-    cmd: python ./src/evaluation/clustering.py
+  standalone_retriever:
+    cmd: python ./evals/Component_level/0_retriever.py
     deps:
-      - ./src/evaluation/clustering.py
-      - ./data/constitution_and_ipc.chroma
-    outs:
-      - ./data/sampled_df.csv
-      - ./data/df.csv
-
-  knowledge_graph:
-    cmd: python ./src/evaluation/knowledge_graph.py
-    deps:
-      - ./src/evaluation/knowledge_graph.py
-      - ./data/sampled_df.csv
-      # Removed ./data/knowledge_graph.json from deps here
+      - ./evals/Component_level/0_retriever.py
+      - ./data/sample_test_set.csv       
     params:
-      - knowledge_graph.create_knowledge_graph
+      - standalone_retriever.test_set
+      - standalone_retriever.output
+      - standalone_retriever.vector_store_name
+      - standalone_retriever.vector_store_collection_name
+      - standalone_retriever.search_type
+      - standalone_retriever.k
+      - standalone_retriever.embeddings.model_name
+      - standalone_retriever.models.region
+      - standalone_retriever.region
+      - standalone_retriever.llm_model_id
+      - standalone_retriever.llm_temperature
+      - standalone_retriever.RECALL_THRESHOLD
+      - standalone_retriever.PRECISION_THRESHOLD
+      - standalone_retriever.name
     outs:
-      - ./data/knowledge_graph.json:
-          cache: false
-          persist: true
+      - ./data/standalone_retriever_eval.csv
 
-  test_set_generation:
-    cmd: python ./src/evaluation/test_set_generation.py
+  standalone_generator:
+    cmd: python ./evals/Component_level/1_generator.py
     deps:
-      - ./src/evaluation/test_set_generation.py
-      - ./data/knowledge_graph.json 
-      # Removed ./data/test_set.csv from deps here
+      - ./evals/Component_level/1_generator.py
+      - ./data/sample_test_set.csv
     params:
-      - test_set_generation.generate_test_set
-      - test_set_generation.test_size
+      - standalone_generator.test_set
+      - standalone_generator.output
+      - standalone_generator.vector_store_name
+      - standalone_generator.vector_store_collection_name
+      - standalone_generator.search_type
+      - standalone_generator.k
+      - standalone_generator.embeddings.model_name
+      - standalone_generator.models.region
+      - standalone_generator.region
+      - standalone_generator.llm_model_id
+      - standalone_generator.llm_temperature
+      - standalone_generator.FAITHFULNESS_THRESHOLD
+      - standalone_generator.ANSWER_RELEVANCY_THRESHOLD
+      - standalone_generator.name
     outs:
-      - ./data/test_set.csv:
-          cache: false
-          persist: true
-
-  evaluate:
-    cmd: python ./src/evaluation/evaluate.py
-    deps:
-      - ./src/evaluation/evaluate.py
-      - ./data/test_set.csv       
-      # Removed ./data/evaluation_progress_results/ from deps here
-    params:
-      - evaluate.evaluate_rag
-    outs:
-      - ./data/evaluation_progress_results/:
-          cache: false
-          persist: true
+      - ./data/standalone_generator_eval.csv
