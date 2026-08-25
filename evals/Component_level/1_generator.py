@@ -3,12 +3,19 @@ import sys
 import yaml
 import mlflow
 import pandas as pd
+import time
 from langchain_chroma import Chroma
 from langchain_aws import ChatBedrockConverse, BedrockEmbeddings
 from deepeval import evaluate
 from deepeval.test_case import LLMTestCase
 from deepeval.metrics import FaithfulnessMetric, AnswerRelevancyMetric
 from deepeval.models import AmazonBedrockModel
+from dotenv import load_dotenv
+
+load_dotenv()
+
+mlflow.set_tracking_uri("https://dagshub.com/pankaj-2708/Self-RAG-and-Corrective-RAG-for-Indian-Constitution.mlflow")
+mlflow.set_experiment("constitution-rag")
 
 if not os.getenv("LANGSMITH_API_KEY") or os.getenv("LANGSMITH_TRACING_V2" == "false"):
     try:
@@ -60,9 +67,11 @@ judge_model = AmazonBedrockModel(
 test_set = pd.read_csv(TEST_SET_PATH)
 
 test_cases = []
+latencies = []  # wall-clock seconds per row for retriever + generator pipeline
 for i in range(len(test_set)):
     query = test_set.iloc[i]['user_input']
     ground_truth = test_set.iloc[i]['reference']
+    t0 = time.perf_counter()
     retrieved_docs = retriever.invoke(query)
     retrieved_docs_text = [doc.page_content for doc in retrieved_docs]
     
@@ -70,6 +79,7 @@ for i in range(len(test_set)):
     prompt = f"Answer the following question based on the provided context.\n\nContext:\n{context_str}\n\nQuestion: {query}"
     
     response = generator_llm.invoke(prompt)
+    latencies.append(time.perf_counter() - t0)
     if isinstance(response.content, list):
         actual_output = " ".join([b["text"] for b in response.content if isinstance(b, dict) and b.get("type") == "text"]).strip()
     else:
@@ -120,6 +130,7 @@ for test_result in evaluation_results.test_results:
     parsed_results.append(row)
 
 df = pd.DataFrame(parsed_results)
+df["latency_seconds"] = latencies   # align by position (same order as test_cases)
 df.to_csv(OUTPUT_PATH, index=False)
 
 faithfulness = df['Faithfulness Score'].mean() if 'Faithfulness Score' in df.columns else None
@@ -128,8 +139,22 @@ answer_relevancy = df['Answer Relevancy Score'].mean() if 'Answer Relevancy Scor
 print(f"Faithfulness: {faithfulness}")
 print(f"Answer Relevancy: {answer_relevancy}")
 
+# ── Latency statistics via pandas quantile ────────────────────────────────────
+latency_series = pd.Series(latencies)
+latency_stats = {
+    "avg_latency": float(latency_series.mean()),
+    "p50_latency": float(latency_series.quantile(0.50)),
+    "p90_latency": float(latency_series.quantile(0.90)),
+    "p95_latency": float(latency_series.quantile(0.95)),
+    "p99_latency": float(latency_series.quantile(0.99)),
+}
+print(f"Avg latency: {latency_stats['avg_latency']:.2f}s | "
+      f"p50: {latency_stats['p50_latency']:.2f}s | "
+      f"p90: {latency_stats['p90_latency']:.2f}s | "
+      f"p95: {latency_stats['p95_latency']:.2f}s | "
+      f"p99: {latency_stats['p99_latency']:.2f}s")
 
-with mlflow.start_run():
+with mlflow.start_run() as parent_run:
     mlflow.log_param("FaithfulnessMetric_llm", params['llm_model_id'])
     mlflow.log_param("FaithfulnessMetric_threshold", params["FAITHFULNESS_THRESHOLD"])
     mlflow.log_param("AnswerRelevancyMetric_llm", params['llm_model_id'])
@@ -137,5 +162,31 @@ with mlflow.start_run():
     mlflow.log_param("Name", params['name'])
     mlflow.log_param("k", params["k"])
     mlflow.log_param("dataset_size", len(test_set))
-    mlflow.log_metrics({"faithfulness": faithfulness, "answer_relevancy": answer_relevancy})
+
+    # ── Aggregate metrics: mean scores + latency stats ────────────────────────
+    agg_metrics = {}
+    if faithfulness is not None:
+        agg_metrics["faithfulness"] = float(faithfulness)
+    if answer_relevancy is not None:
+        agg_metrics["answer_relevancy"] = float(answer_relevancy)
+    if agg_metrics:
+        mlflow.log_metrics(agg_metrics)
+    mlflow.log_metrics(latency_stats)
+
+    # ── Artifact: full results CSV ────────────────────────────────────────────
     mlflow.log_artifact(OUTPUT_PATH, "eval_results")
+
+    # ── Per-row nested child runs ─────────────────────────────────────────────
+    for idx, test_result in enumerate(evaluation_results.test_results):
+        row_metrics = {}
+        for metric in test_result.metrics_data:
+            safe_name = metric.name.lower().replace(" ", "_") + "_score"
+            row_metrics[safe_name] = float(metric.score if metric.score is not None else 0)
+        row_metrics["latency_seconds"] = float(latencies[idx])
+        row_metrics["success"] = float(int(test_result.success))
+
+        with mlflow.start_run(run_name=f"row_{idx:03d}", nested=True):
+            mlflow.set_tag("row_index", str(idx))
+            mlflow.set_tag("question", (test_result.input or "")[:500])
+            mlflow.set_tag("actual_output", (test_result.actual_output or "")[:500])
+            mlflow.log_metrics(row_metrics)

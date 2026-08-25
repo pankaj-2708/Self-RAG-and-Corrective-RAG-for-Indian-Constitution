@@ -5,6 +5,12 @@ import mlflow
 import pandas as pd
 import asyncio
 import uuid
+import time
+from dotenv import load_dotenv
+
+load_dotenv()
+
+mlflow.set_tracking_uri("https://dagshub.com/pankaj-2708/Self-RAG-and-Corrective-RAG-for-Indian-Constitution.mlflow")
 
 # Resolve paths and check execution parameter before loading heavy modules or telemetry
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -26,6 +32,8 @@ from deepeval.metrics import (
 )
 from deepeval.models import AmazonBedrockModel
 from src.workflow import get_workflow
+
+mlflow.set_experiment("constitution-rag")
 
 if not os.getenv("LANGSMITH_API_KEY") or os.getenv("LANGSMITH_TRACING_V2") == "false":
     try:
@@ -53,6 +61,7 @@ test_set = pd.read_csv(TEST_SET_PATH)
 
 async def generate_test_cases():
     test_cases = []
+    latencies = []  # wall-clock seconds per row for workflow.ainvoke()
     async with get_workflow() as (workflow, ck_ptr):
         for i in range(len(test_set)):
             query = test_set.iloc[i]['user_input']
@@ -64,10 +73,12 @@ async def generate_test_cases():
                 "max_retry_for_groundness_checking": 1,
                 "max_retry_for_answer_relevant_checking": 1,
             }
+            t0 = time.perf_counter()
             res = await workflow.ainvoke(
                 initial_state,
                 config={"configurable": {"thread_id": thread_id}}
             )
+            latencies.append(time.perf_counter() - t0)
             actual_output = res.get("generated_response", "")
             raw_contexts = res.get("relevant_contexts") or res.get("retrieved_contexts") or []
             rel_contexts = [c for c in raw_contexts if c != "-1"]
@@ -80,9 +91,9 @@ async def generate_test_cases():
                     actual_output=actual_output
                 )
             )
-    return test_cases
+    return test_cases, latencies
 
-test_cases = asyncio.run(generate_test_cases())
+test_cases, latencies = asyncio.run(generate_test_cases())
 
 metrics = [
     ContextualRecallMetric(threshold=params['RECALL_THRESHOLD'], model=judge_model, include_reason=True),
@@ -129,6 +140,7 @@ for test_result in evaluation_results.test_results:
     parsed_results.append(row)
 
 df = pd.DataFrame(parsed_results)
+df["latency_seconds"] = latencies   # align by position (same order as test_cases)
 df.to_csv(OUTPUT_PATH, index=False)
 
 recall = df['Contextual Recall Score'].mean() if 'Contextual Recall Score' in df.columns else None
@@ -154,7 +166,22 @@ if contextual_relevancy is not None:
     metrics_dict["contextual_relevancy"] = float(contextual_relevancy)
     print(f"Contextual Relevancy: {contextual_relevancy}")
 
-with mlflow.start_run():
+# ── Latency statistics via pandas quantile ────────────────────────────────────
+latency_series = pd.Series(latencies)
+latency_stats = {
+    "avg_latency":  float(latency_series.mean()),
+    "p50_latency":  float(latency_series.quantile(0.50)),
+    "p90_latency":  float(latency_series.quantile(0.90)),
+    "p95_latency":  float(latency_series.quantile(0.95)),
+    "p99_latency":  float(latency_series.quantile(0.99)),
+}
+print(f"Avg latency: {latency_stats['avg_latency']:.2f}s | "
+      f"p50: {latency_stats['p50_latency']:.2f}s | "
+      f"p90: {latency_stats['p90_latency']:.2f}s | "
+      f"p95: {latency_stats['p95_latency']:.2f}s | "
+      f"p99: {latency_stats['p99_latency']:.2f}s")
+
+with mlflow.start_run() as parent_run:
     def log_params_recursive(d, prefix=""):
         for k, v in d.items():
             param_key = f"{prefix}{k}" if prefix else str(k)
@@ -165,7 +192,26 @@ with mlflow.start_run():
 
     log_params_recursive(params)
     mlflow.log_param("dataset_size", len(test_set))
-    
+
+    # ── Aggregate metrics: mean scores + latency stats ────────────────────────
     if metrics_dict:
         mlflow.log_metrics(metrics_dict)
+    mlflow.log_metrics(latency_stats)
+
+    # ── Artifact: full results CSV ────────────────────────────────────────────
     mlflow.log_artifact(OUTPUT_PATH, "eval_results")
+
+    # ── Per-row nested child runs ─────────────────────────────────────────────
+    for idx, test_result in enumerate(evaluation_results.test_results):
+        row_metrics = {}
+        for metric in test_result.metrics_data:
+            safe_name = metric.name.lower().replace(" ", "_") + "_score"
+            row_metrics[safe_name] = float(metric.score if metric.score is not None else 0)
+        row_metrics["latency_seconds"] = float(latencies[idx])
+        row_metrics["success"] = float(int(test_result.success))
+
+        with mlflow.start_run(run_name=f"row_{idx:03d}", nested=True):
+            mlflow.set_tag("row_index", str(idx))
+            mlflow.set_tag("question", (test_result.input or "")[:500])
+            mlflow.set_tag("actual_output", (test_result.actual_output or "")[:500])
+            mlflow.log_metrics(row_metrics)
