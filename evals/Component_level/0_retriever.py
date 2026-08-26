@@ -116,7 +116,6 @@ for test_result in evaluation_results.test_results:
 
 df = pd.DataFrame(parsed_results)
 df["latency_seconds"] = latencies   # align by position (same order as test_cases)
-df.to_csv(OUTPUT_PATH, index=False)
 
 precision=df['Contextual Precision Score'].mean()
 recall=df['Contextual Recall Score'].mean()
@@ -139,49 +138,34 @@ print(f"Avg latency: {latency_stats['avg_latency']:.2f}s | "
       f"p95: {latency_stats['p95_latency']:.2f}s | "
       f"p99: {latency_stats['p99_latency']:.2f}s")
 
+# ── Concatenate latency summary rows to output DataFrame & save to single file ──
+latency_summary_rows = [
+    {"input": f"[LATENCY_STAT] {k}", "latency_seconds": v}
+    for k, v in latency_stats.items()
+]
+combined_df = pd.concat([df, pd.DataFrame(latency_summary_rows)], ignore_index=True)
+combined_df.to_csv(OUTPUT_PATH, index=False)
+
 with mlflow.start_run() as parent_run:
-    mlflow.log_param("ContextualRecallMetric_llm", params['llm_model_id'])
-    mlflow.log_param("ContextualRecallMetric_threshold", params["RECALL_THRESHOLD"])
-    mlflow.log_param("ContextualPrecisionMetric_llm", params['llm_model_id'])
-    mlflow.log_param("ContextualPrecisionMetric_threshold", params["PRECISION_THRESHOLD"])
-    mlflow.log_param("Name", params['name'])
-    mlflow.log_param("k", params["k"])
-    mlflow.log_param("dataset_size", len(test_set))
+    # ── Log params once using log_params ──────────────────────────────────────
+    eval_params = {
+        "ContextualRecallMetric_llm": params['llm_model_id'],
+        "ContextualRecallMetric_threshold": params["RECALL_THRESHOLD"],
+        "ContextualPrecisionMetric_llm": params['llm_model_id'],
+        "ContextualPrecisionMetric_threshold": params["PRECISION_THRESHOLD"],
+        "Name": params['name'],
+        "k": params["k"],
+        "dataset_size": len(test_set),
+    }
+    mlflow.log_params(eval_params)
 
-    # ── Aggregate metrics: mean scores + latency stats ────────────────────────
-    mlflow.log_metrics({"precision": float(precision), "recall": float(recall)})
-    mlflow.log_metrics(latency_stats)
+    # ── Log metrics once using log_metrics ────────────────────────────────────
+    all_metrics = {
+        "precision": float(precision),
+        "recall": float(recall),
+        **latency_stats,
+    }
+    mlflow.log_metrics(all_metrics)
 
-    # ── Artifact: full results CSV ────────────────────────────────────────────
+    # ── Artifact: concatenated output and latency CSV file ───────────────────
     mlflow.log_artifact(OUTPUT_PATH, "eval_results")
-
-    # ── Per-row nested child runs ─────────────────────────────────────────────
-    for idx, test_result in enumerate(evaluation_results.test_results):
-        row_metrics = {}
-        for metric in test_result.metrics_data:
-            safe_name = metric.name.lower().replace(" ", "_") + "_score"
-            row_metrics[safe_name] = float(metric.score if metric.score is not None else 0)
-        row_metrics["latency_seconds"] = float(latencies[idx])
-        row_metrics["success"] = float(int(test_result.success))
-
-        with mlflow.start_run(run_name=f"row_{idx:03d}", nested=True):
-            mlflow.set_tag("row_index", str(idx))
-            mlflow.set_tag("question", (test_result.input or "")[:1000])
-            mlflow.set_tag("input", (test_result.input or "")[:1000])
-            mlflow.set_tag("actual_output", (test_result.actual_output or "")[:1000])
-            mlflow.set_tag("ground_truth", (test_result.expected_output or "")[:1000])
-            mlflow.set_tag("expected_output", (test_result.expected_output or "")[:1000])
-
-            if test_result.retrieval_context:
-                if isinstance(test_result.retrieval_context, list):
-                    ctx_str = "\n---\n".join(str(c) for c in test_result.retrieval_context)
-                else:
-                    ctx_str = str(test_result.retrieval_context)
-                mlflow.set_tag("retrieved_context", ctx_str[:1000])
-
-            for metric in test_result.metrics_data:
-                safe_name = metric.name.lower().replace(" ", "_")
-                if metric.reason:
-                    mlflow.set_tag(f"{safe_name}_reason", str(metric.reason)[:1000])
-
-            mlflow.log_metrics(row_metrics)
