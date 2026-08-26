@@ -3,7 +3,7 @@ stages:
     cmd: python ./evals/Component_level/0_retriever.py
     deps:
       - ./evals/Component_level/0_retriever.py
-      - ./data/sample_test_set.csv       
+      - ./data/test_set.csv       
     params:
       - standalone_retriever.test_set
       - standalone_retriever.output
@@ -26,7 +26,7 @@ stages:
     cmd: python ./evals/Component_level/1_generator.py
     deps:
       - ./evals/Component_level/1_generator.py
-      - ./data/sample_test_set.csv
+      - ./data/test_set.csv
     params:
       - standalone_generator.test_set
       - standalone_generator.output
@@ -49,7 +49,7 @@ stages:
     cmd: python ./evals/PipelineLevel/eval.py
     deps:
       - ./evals/PipelineLevel/eval.py
-      - ./data/sample_test_set.csv
+      - ./data/test_set.csv
       - ./src/workflow
     params:
       - pipeline_eval.test_set

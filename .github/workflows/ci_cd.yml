@@ -1,10 +1,39 @@
 name: CI CD pipeline
 on:
     push:
-      branches: "main"
 
 jobs:
+    run_and_log_evals:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout Repository
+          uses: actions/checkout@v3
+
+        - name: Setup Python 3.12
+          uses: actions/setup-python@v3
+          with:
+            python-version: '3.12'
+
+        - name: Install Dependencies
+          run: |
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+
+        - name: Run and Log Evals
+          env:
+            LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+            LANGSMITH_TRACING_V2: ${{ secrets.LANGSMITH_TRACING_V2 }}
+            LANGSMITH_PROJECT: ${{ secrets.LANGSMITH_PROJECT }}
+            LANGSMITH_ENDPOINT: ${{ secrets.LANGSMITH_ENDPOINT }}
+            AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+            MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+            MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+            TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          run: |
+            dvc repro
+
     build_image_and_push_to_ecr:
+      needs: run_and_log_evals
       runs-on: ubuntu-latest
       steps:
         - name: Checkout Repository

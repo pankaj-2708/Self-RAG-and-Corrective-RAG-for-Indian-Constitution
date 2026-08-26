@@ -9,8 +9,8 @@ stages:
       size: 6193
     - path: ./evals/Component_level/0_retriever.py
       hash: md5
-      md5: 5008937126ba5f4d48853b32e5377d00
-      size: 4754
+      md5: 40105d2ec6094e828f34a2d39c824d63
+      size: 7975
     params:
       params.yaml:
         standalone_retriever.PRECISION_THRESHOLD: 0.7
@@ -24,25 +24,25 @@ stages:
         standalone_retriever.output: standalone_retriever_eval.csv
         standalone_retriever.region: us-east-1
         standalone_retriever.search_type: similarity
-        standalone_retriever.test_set: test_set.csv
+        standalone_retriever.test_set: sample_test_set.csv
         standalone_retriever.vector_store_collection_name: constitution_and_ipc
         standalone_retriever.vector_store_name: constitution_and_ipc.chroma
     outs:
     - path: ./data/standalone_retriever_eval.csv
       hash: md5
-      md5: bc77a79af4c4846663bf830ea3dc8542
-      size: 10852
+      md5: fba78513d67709e56f9200da9bfce869
+      size: 10795
   standalone_generator:
     cmd: python ./evals/Component_level/1_generator.py
     deps:
     - path: ./data/sample_test_set.csv
       hash: md5
-      md5: 40ac768646c5182e5ae1513866fbb7a4
-      size: 1212
+      md5: 927d80b4a47a7b075a1da3d821b07254
+      size: 6193
     - path: ./evals/Component_level/1_generator.py
       hash: md5
-      md5: a005d4e475066f150be42d4037f946dd
-      size: 5409
+      md5: 3a77075dd67ece62767c761e86807ec2
+      size: 8752
     params:
       params.yaml:
         standalone_generator.ANSWER_RELEVANCY_THRESHOLD: 0.7
@@ -52,7 +52,7 @@ stages:
         standalone_generator.llm_model_id: deepseek.v3.2
         standalone_generator.llm_temperature: 0.0
         standalone_generator.models.region: us-east-1
-        standalone_generator.name: only_generator
+        standalone_generator.name: only_generator_for_full_test_set
         standalone_generator.output: standalone_generator_eval.csv
         standalone_generator.region: us-east-1
         standalone_generator.search_type: similarity
@@ -62,24 +62,24 @@ stages:
     outs:
     - path: ./data/standalone_generator_eval.csv
       hash: md5
-      md5: 8f14a3f6375004f3d865b0d8548bef92
-      size: 5211
+      md5: 354e54d5d5b13a4eb2828bce60c32e68
+      size: 12155
   pipeline_eval:
     cmd: python ./evals/PipelineLevel/eval.py
     deps:
     - path: ./data/sample_test_set.csv
       hash: md5
-      md5: 4ef16b147a74e38bd9d4640e57e9d8e5
-      size: 24353
+      md5: 927d80b4a47a7b075a1da3d821b07254
+      size: 6193
     - path: ./evals/PipelineLevel/eval.py
       hash: md5
-      md5: 1dcd956d02700b878296ef22a16845fd
-      size: 6710
+      md5: 01cf1c855f80701d39e9bf44253656ca
+      size: 10067
     - path: ./src/workflow
       hash: md5
-      md5: 14b922a511c94a6dcb1612b051f366e4.dir
-      size: 121164
-      nfiles: 16
+      md5: e8b1906faa96f4af0a44af14ef81b1d2.dir
+      size: 189361
+      nfiles: 23
     params:
       params.yaml:
         pipeline_eval.ANSWER_RELEVANCY_THRESHOLD: 0.7
@@ -92,7 +92,7 @@ stages:
         pipeline_eval.llm_model_id: deepseek.v3.2
         pipeline_eval.llm_temperature: 0.0
         pipeline_eval.models.region: us-east-1
-        pipeline_eval.name: pipeline_eval_with_10_rows
+        pipeline_eval.name: pipeline_eval_for_full_test_set
         pipeline_eval.output: pipeline_eval.csv
         pipeline_eval.region: us-east-1
         pipeline_eval.search_type: similarity
@@ -102,5 +102,5 @@ stages:
     outs:
     - path: ./data/pipeline_eval.csv
       hash: md5
-      md5: eba079563608e794ea414cad4b98f131
-      size: 53563
+      md5: db5480b2fe1d1f4da819b3792ff76f23
+      size: 8277

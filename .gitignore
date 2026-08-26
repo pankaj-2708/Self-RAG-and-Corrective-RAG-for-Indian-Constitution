@@ -31,3 +31,5 @@ frontend_backup_20260818
 .cache_ggshield
 .deepeval
 mlruns
+graphify-out
+.agents

@@ -17,7 +17,7 @@ load_dotenv()
 mlflow.set_tracking_uri("https://dagshub.com/pankaj-2708/Self-RAG-and-Corrective-RAG-for-Indian-Constitution.mlflow")
 mlflow.set_experiment("constitution-rag")
 
-if not os.getenv("LANGSMITH_API_KEY") or os.getenv("LANGSMITH_TRACING_V2" == "false"):
+if not os.getenv("LANGSMITH_API_KEY") or os.getenv("LANGSMITH_TRACING_V2") == "false":
     try:
         from phoenix.otel import register
         tracer_provider = register(
@@ -187,6 +187,22 @@ with mlflow.start_run() as parent_run:
 
         with mlflow.start_run(run_name=f"row_{idx:03d}", nested=True):
             mlflow.set_tag("row_index", str(idx))
-            mlflow.set_tag("question", (test_result.input or "")[:500])
-            mlflow.set_tag("actual_output", (test_result.actual_output or "")[:500])
+            mlflow.set_tag("question", (test_result.input or "")[:1000])
+            mlflow.set_tag("input", (test_result.input or "")[:1000])
+            mlflow.set_tag("actual_output", (test_result.actual_output or "")[:1000])
+            mlflow.set_tag("ground_truth", (test_result.expected_output or "")[:1000])
+            mlflow.set_tag("expected_output", (test_result.expected_output or "")[:1000])
+
+            if test_result.retrieval_context:
+                if isinstance(test_result.retrieval_context, list):
+                    ctx_str = "\n---\n".join(str(c) for c in test_result.retrieval_context)
+                else:
+                    ctx_str = str(test_result.retrieval_context)
+                mlflow.set_tag("retrieved_context", ctx_str[:1000])
+
+            for metric in test_result.metrics_data:
+                safe_name = metric.name.lower().replace(" ", "_")
+                if metric.reason:
+                    mlflow.set_tag(f"{safe_name}_reason", str(metric.reason)[:1000])
+
             mlflow.log_metrics(row_metrics)
