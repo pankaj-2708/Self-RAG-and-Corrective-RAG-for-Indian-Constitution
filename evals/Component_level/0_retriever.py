@@ -62,6 +62,10 @@ test_set=pd.read_csv(TEST_SET_PATH)
 
 test_cases=[]
 latencies = []  # wall-clock seconds per row for retriever.invoke()
+input_tokens = []
+output_tokens = []
+total_tokens = []
+
 for i in range(len(test_set)):
     query=test_set.iloc[i]['user_input']
     ground_truth=test_set.iloc[i]['reference']
@@ -69,6 +73,9 @@ for i in range(len(test_set)):
     retrieved_docs=retriever.invoke(query)
     latencies.append(time.perf_counter() - t0)
     retrieved_docs=[doc.page_content for doc in retrieved_docs]
+    input_tokens.append(0)
+    output_tokens.append(0)
+    total_tokens.append(0)
     
     test_cases.append(
         LLMTestCase(
@@ -116,6 +123,9 @@ for test_result in evaluation_results.test_results:
 
 df = pd.DataFrame(parsed_results)
 df["latency_seconds"] = latencies   # align by position (same order as test_cases)
+df["input_tokens"] = input_tokens
+df["output_tokens"] = output_tokens
+df["total_tokens"] = total_tokens
 
 precision=df['Contextual Precision Score'].mean()
 recall=df['Contextual Recall Score'].mean()
@@ -138,15 +148,29 @@ print(f"Avg latency: {latency_stats['avg_latency']:.2f}s | "
       f"p95: {latency_stats['p95_latency']:.2f}s | "
       f"p99: {latency_stats['p99_latency']:.2f}s")
 
-# ── Concatenate latency summary rows to output DataFrame & save to single file ──
-latency_summary_rows = [
+# ── Token statistics ──────────────────────────────────────────────────────────
+token_stats = {
+    "total_input_tokens": int(df["input_tokens"].sum()),
+    "total_output_tokens": int(df["output_tokens"].sum()),
+    "total_tokens": int(df["total_tokens"].sum()),
+    "avg_input_tokens": float(df["input_tokens"].mean()),
+    "avg_output_tokens": float(df["output_tokens"].mean()),
+    "avg_total_tokens": float(df["total_tokens"].mean()),
+}
+print(f"Total tokens: {token_stats['total_tokens']} (Input: {token_stats['total_input_tokens']}, Output: {token_stats['total_output_tokens']}) | Avg per row: {token_stats['avg_total_tokens']:.1f}")
+
+# ── Concatenate summary rows to output DataFrame & save to single file ────────
+summary_rows = [
     {"input": f"[LATENCY_STAT] {k}", "latency_seconds": v}
     for k, v in latency_stats.items()
+] + [
+    {"input": f"[TOKEN_STAT] {k}", "total_tokens": v}
+    for k, v in token_stats.items()
 ]
-combined_df = pd.concat([df, pd.DataFrame(latency_summary_rows)], ignore_index=True)
+combined_df = pd.concat([df, pd.DataFrame(summary_rows)], ignore_index=True)
 combined_df.to_csv(OUTPUT_PATH, index=False)
 
-with mlflow.start_run() as parent_run:
+with mlflow.start_run(run_name=params['name']) as parent_run:
     # ── Log params once using log_params ──────────────────────────────────────
     eval_params = {
         "ContextualRecallMetric_llm": params['llm_model_id'],
@@ -164,6 +188,7 @@ with mlflow.start_run() as parent_run:
         "precision": float(precision),
         "recall": float(recall),
         **latency_stats,
+        **token_stats,
     }
     mlflow.log_metrics(all_metrics)
 

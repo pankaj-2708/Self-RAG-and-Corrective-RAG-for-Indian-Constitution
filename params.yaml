@@ -1,5 +1,5 @@
 standalone_retriever:
-  test_set: "test_set.csv"
+  test_set: "sample_test_set.csv"
   output: "standalone_retriever_eval.csv"
   vector_store_name: "constitution_and_ipc.chroma"
   vector_store_collection_name: "constitution_and_ipc"
@@ -14,10 +14,10 @@ standalone_retriever:
   llm_temperature: 0.0
   RECALL_THRESHOLD: 0.7
   PRECISION_THRESHOLD: 0.7
-  name: "only_retriever_for_full_test_set"
+  name: "only_retriever_for_10_rows"
 
 standalone_generator:
-  test_set: "test_set.csv"
+  test_set: "sample_test_set.csv"
   output: "standalone_generator_eval.csv"
   vector_store_name: "constitution_and_ipc.chroma"
   vector_store_collection_name: "constitution_and_ipc"
@@ -32,10 +32,10 @@ standalone_generator:
   llm_temperature: 0.0
   FAITHFULNESS_THRESHOLD: 0.7
   ANSWER_RELEVANCY_THRESHOLD: 0.7
-  name: "only_generator_for_full_test_set"
+  name: "only_generator_for_10_rows"
 
 pipeline_eval:
-  test_set: "test_set.csv"
+  test_set: "sample_test_set.csv"
   output: "pipeline_eval.csv"
   vector_store_name: "constitution_and_ipc.chroma"
   vector_store_collection_name: "constitution_and_ipc"
@@ -53,4 +53,5 @@ pipeline_eval:
   FAITHFULNESS_THRESHOLD: 0.7
   ANSWER_RELEVANCY_THRESHOLD: 0.7
   CONTEXTUAL_RELEVANCY_THRESHOLD: 0.7
-  name: "pipeline_eval_for_full_test_set"
+  name: "pipeline_eval_for_10_rows"
+  max_retriever_queries: 3

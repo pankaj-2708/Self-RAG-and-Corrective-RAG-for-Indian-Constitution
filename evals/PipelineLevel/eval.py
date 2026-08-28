@@ -62,6 +62,9 @@ test_set = pd.read_csv(TEST_SET_PATH)
 async def generate_test_cases():
     test_cases = []
     latencies = []  # wall-clock seconds per row for workflow.ainvoke()
+    input_tokens = []
+    output_tokens = []
+    total_tokens = []
     async with get_workflow() as (workflow, ck_ptr):
         for i in range(len(test_set)):
             query = test_set.iloc[i]['user_input']
@@ -72,6 +75,7 @@ async def generate_test_cases():
                 "k": params.get("k", 3),
                 "max_retry_for_groundness_checking": 1,
                 "max_retry_for_answer_relevant_checking": 1,
+                "max_retriever_queries":params.get("max_retriever_queries",3)
             }
             t0 = time.perf_counter()
             res = await workflow.ainvoke(
@@ -79,6 +83,12 @@ async def generate_test_cases():
                 config={"configurable": {"thread_id": thread_id}}
             )
             latencies.append(time.perf_counter() - t0)
+            in_tok = int(res.get("input_tokens", 0))
+            out_tok = int(res.get("output_tokens", 0))
+            input_tokens.append(in_tok)
+            output_tokens.append(out_tok)
+            total_tokens.append(in_tok + out_tok)
+
             actual_output = res.get("generated_response", "")
             raw_contexts = res.get("relevant_contexts") or res.get("retrieved_contexts") or []
             rel_contexts = [c for c in raw_contexts if c != "-1"]
@@ -91,9 +101,9 @@ async def generate_test_cases():
                     actual_output=actual_output
                 )
             )
-    return test_cases, latencies
+    return test_cases, latencies, input_tokens, output_tokens, total_tokens
 
-test_cases, latencies = asyncio.run(generate_test_cases())
+test_cases, latencies, input_tokens, output_tokens, total_tokens = asyncio.run(generate_test_cases())
 
 metrics = [
     ContextualRecallMetric(threshold=params['RECALL_THRESHOLD'], model=judge_model, include_reason=True),
@@ -141,6 +151,9 @@ for test_result in evaluation_results.test_results:
 
 df = pd.DataFrame(parsed_results)
 df["latency_seconds"] = latencies   # align by position (same order as test_cases)
+df["input_tokens"] = input_tokens
+df["output_tokens"] = output_tokens
+df["total_tokens"] = total_tokens
 
 recall = df['Contextual Recall Score'].mean() if 'Contextual Recall Score' in df.columns else None
 precision = df['Contextual Precision Score'].mean() if 'Contextual Precision Score' in df.columns else None
@@ -180,15 +193,29 @@ print(f"Avg latency: {latency_stats['avg_latency']:.2f}s | "
       f"p95: {latency_stats['p95_latency']:.2f}s | "
       f"p99: {latency_stats['p99_latency']:.2f}s")
 
-# ── Concatenate latency summary rows to output DataFrame & save to single file ──
-latency_summary_rows = [
+# ── Token statistics ──────────────────────────────────────────────────────────
+token_stats = {
+    "total_input_tokens": int(df["input_tokens"].sum()),
+    "total_output_tokens": int(df["output_tokens"].sum()),
+    "total_tokens": int(df["total_tokens"].sum()),
+    "avg_input_tokens": float(df["input_tokens"].mean()),
+    "avg_output_tokens": float(df["output_tokens"].mean()),
+    "avg_total_tokens": float(df["total_tokens"].mean()),
+}
+print(f"Total tokens: {token_stats['total_tokens']} (Input: {token_stats['total_input_tokens']}, Output: {token_stats['total_output_tokens']}) | Avg per row: {token_stats['avg_total_tokens']:.1f}")
+
+# ── Concatenate summary rows to output DataFrame & save to single file ────────
+summary_rows = [
     {"input": f"[LATENCY_STAT] {k}", "latency_seconds": v}
     for k, v in latency_stats.items()
+] + [
+    {"input": f"[TOKEN_STAT] {k}", "total_tokens": v}
+    for k, v in token_stats.items()
 ]
-combined_df = pd.concat([df, pd.DataFrame(latency_summary_rows)], ignore_index=True)
+combined_df = pd.concat([df, pd.DataFrame(summary_rows)], ignore_index=True)
 combined_df.to_csv(OUTPUT_PATH, index=False)
 
-with mlflow.start_run() as parent_run:
+with mlflow.start_run(run_name=params['name']) as parent_run:
     # ── Flatten params into a dict and log once using log_params ────────────
     eval_params = {}
     def flatten_params(d, prefix=""):
@@ -204,7 +231,7 @@ with mlflow.start_run() as parent_run:
     mlflow.log_params(eval_params)
 
     # ── Log metrics once using log_metrics ────────────────────────────────────
-    all_metrics = {**metrics_dict, **latency_stats}
+    all_metrics = {**metrics_dict, **latency_stats, **token_stats}
     mlflow.log_metrics(all_metrics)
 
     # ── Artifact: concatenated output and latency CSV file ───────────────────

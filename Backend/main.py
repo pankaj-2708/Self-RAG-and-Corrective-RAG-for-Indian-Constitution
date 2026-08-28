@@ -215,6 +215,7 @@ async def run_workflow(thread_id, user_query):
                 initial_state = {
                     "user_query": user_query,
                     "k": _pipeline_defaults.get("k", 2),
+                    "max_retriever_queries": _pipeline_defaults.get("max_retriever_queries", 3),
                     "max_retry_for_groundness_checking": _pipeline_defaults.get("max_retry_for_groundness_checking", 1),
                     "max_retry_for_answer_relevant_checking": _pipeline_defaults.get("max_retry_for_answer_relevant_checking", 1),
                 }
@@ -222,6 +223,7 @@ async def run_workflow(thread_id, user_query):
                 initial_state = {
                     "user_query": user_query,
                     "k": _pipeline_defaults.get("k", 2),
+                    "max_retriever_queries": _pipeline_defaults.get("max_retriever_queries", 3),
                     "max_retry_for_groundness_checking": _pipeline_defaults.get("max_retry_for_groundness_checking", 1),
                     "max_retry_for_answer_relevant_checking": _pipeline_defaults.get("max_retry_for_answer_relevant_checking", 1),
                     "max_turns_before_summarisation": _pipeline_defaults.get("max_turns_before_summarisation", 2),

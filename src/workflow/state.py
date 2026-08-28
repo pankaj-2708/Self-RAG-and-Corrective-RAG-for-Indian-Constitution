@@ -33,6 +33,7 @@ class schema(TypedDict):
     relevance_explanation: str
     evidence: str
     k: Optional[int] = Field(default=3)
+    max_retriever_queries: Optional[int] = Field(default=3)
     max_retry_for_groundness_checking: Optional[int] = Field(default=3)
     max_retry_for_answer_relevant_checking: Optional[int] = Field(default=2)
     messages: List[BaseMessage]

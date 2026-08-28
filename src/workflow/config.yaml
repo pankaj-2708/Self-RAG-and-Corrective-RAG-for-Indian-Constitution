@@ -27,6 +27,7 @@ vector_store:
 retriever:
   search_type: "similarity"
   k: 3                            # number of docs returned per similarity search
+  max_queries: 3                  # maximum retriever queries allowed per user query
 
 web_search:
   max_results: 2                  # Tavily results per query
@@ -37,6 +38,7 @@ workflow:
 pipeline_defaults:
   # These are the defaults used by cli.py and Backend/main.py when starting a new thread
   k: 2
+  max_retriever_queries: 3
   max_retry_for_groundness_checking: 1
   max_retry_for_answer_relevant_checking: 1
   max_turns_before_summarisation: 2

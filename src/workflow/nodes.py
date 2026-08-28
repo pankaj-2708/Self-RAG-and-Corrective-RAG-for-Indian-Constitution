@@ -4,7 +4,7 @@ from workflow.config import (
     decision_model, retrieval_decider_model, query_gen_model, generation_model,
     context_answer_model, grounding_model,
     critic_model, judge_model, answer_rewrite_model,
-    retriever, tavily_tool, vector_store
+    retriever, tavily_tool, vector_store, max_retriever_queries
 )
 from workflow.schemas import (
     parser_for_retrieval_decider_node,
@@ -79,8 +79,9 @@ async def generate_retriever_query_node(state: schema):
     res = await parser_for_retriever_query_node.ainvoke(
         response.content
     )
-    # Explicit check to enforce at most 3 queries
-    queries = res.retriever_queries[:3]
+    # Enforce configured max queries hyperparameter
+    max_queries = state.get("max_retriever_queries") if state.get("max_retriever_queries") is not None else max_retriever_queries
+    queries = res.retriever_queries[:max_queries]
     
     queries_dicts = [
         {

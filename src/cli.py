@@ -52,6 +52,7 @@ async def main():
                 initial_state = {
                     "user_query": human,
                     "k": 2,
+                    "max_retriever_queries": 3,
                     "max_retry_for_groundness_checking": 1,
                     "max_retry_for_answer_relevant_checking": 1
                 }
@@ -59,6 +60,7 @@ async def main():
                 initial_state = {
                     "user_query": human,
                     "k": 2,
+                    "max_retriever_queries": 3,
                     "max_retry_for_groundness_checking": 1,
                     "max_retry_for_answer_relevant_checking": 1,
                     "max_turns_before_summarisation": 2,

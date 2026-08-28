@@ -82,6 +82,7 @@ retriever = vector_store.as_retriever(
     search_type=_ret["search_type"],
     search_kwargs={"k": _ret["k"]},
 )
+max_retriever_queries = _ret.get("max_queries", 3)
 
 # ── Web search ─────────────────────────────────────────────────────────────────
 tavily_tool = TavilySearch(max_results=_ws["max_results"])
