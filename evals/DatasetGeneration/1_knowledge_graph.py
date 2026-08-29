@@ -17,18 +17,21 @@ create_knowledge_graph = kg_config.get("create_knowledge_graph", True)
 if not create_knowledge_graph:
     if os.path.exists(kg_path):
         from ragas.testset.graph import KnowledgeGraph
+
         kg = KnowledgeGraph().load(kg_path)
-        print(f"create_knowledge_graph is set to False in config.yaml. Loaded knowledge graph from {kg_path}")
+        print(
+            f"create_knowledge_graph is set to False in config.yaml. Loaded knowledge graph from {kg_path}"
+        )
         kg.save(kg_path)
     else:
-        print(f"create_knowledge_graph is set to False in config.yaml and {kg_path} does not exist. Exiting.")
+        print(
+            f"create_knowledge_graph is set to False in config.yaml and {kg_path} does not exist. Exiting."
+        )
     sys.exit(0)
 
 from phoenix.otel import register
-tracer_provider = register(
-  project_name="constitution",
-  auto_instrument=True 
-)
+
+tracer_provider = register(project_name="constitution", auto_instrument=True)
 
 import json
 import ast
@@ -45,22 +48,24 @@ from ragas.testset.transforms import default_transforms, apply_transforms
 from ragas.run_config import RunConfig
 
 warnings.filterwarnings("ignore")
-os.environ['LANGSMITH_TRACING_V2'] = "false"
+os.environ["LANGSMITH_TRACING_V2"] = "false"
 
 load_dotenv()
 
-if not os.environ.get('AWS_BEARER_TOKEN_BEDROCK'):
+if not os.environ.get("AWS_BEARER_TOKEN_BEDROCK"):
     raise ValueError("AWS_BEARER_TOKEN_BEDROCK environment variable is not set")
 
 sampled_df_path = os.path.join(DATA_DIR, "sampled_df.csv")
-    
 
-generator_embeddings = HuggingFaceEmbeddings(model_name=eval_config["embeddings"]["model_name"])
+
+generator_embeddings = HuggingFaceEmbeddings(
+    model_name=eval_config["embeddings"]["model_name"]
+)
 generator_embeddings = LangchainEmbeddingsWrapper(generator_embeddings)
 
 generator_llm = ChatBedrockConverse(
     model=eval_config["models"]["llm_model_id"],
-    api_key=os.environ['AWS_BEARER_TOKEN_BEDROCK'],
+    api_key=os.environ["AWS_BEARER_TOKEN_BEDROCK"],
     region_name=eval_config["models"]["region"],
     temperature=eval_config["models"]["llm_temperature"],
 )
@@ -72,20 +77,25 @@ documents = []
 for i in range(sampled_df.shape[0]):
     documents.append(
         Document(
-            page_content=sampled_df['document'].values[i],
-            metadata=json.loads(json.dumps(ast.literal_eval(sampled_df['metadata'].values[i])))
+            page_content=sampled_df["document"].values[i],
+            metadata=json.loads(
+                json.dumps(ast.literal_eval(sampled_df["metadata"].values[i]))
+            ),
         )
     )
 
-rc = kg_config.get("run_config", {
-    "max_workers": 10,
-    "timeout": 180,
-    "max_retries": 10,
-    "max_wait": 60,
-    "log_tenacity": True,
-})
+rc = kg_config.get(
+    "run_config",
+    {
+        "max_workers": 10,
+        "timeout": 180,
+        "max_retries": 10,
+        "max_wait": 60,
+        "log_tenacity": True,
+    },
+)
 my_run_config = RunConfig(
-    max_workers=rc["max_workers"],      
+    max_workers=rc["max_workers"],
     timeout=rc["timeout"],
     max_retries=rc["max_retries"],
     max_wait=rc["max_wait"],
@@ -97,13 +107,20 @@ my_run_config = RunConfig(
 # else:
 kg = KnowledgeGraph()
 for doc in documents:
-    kg.nodes.append(Node(
-        type=NodeType.DOCUMENT,
-        properties={"page_content": doc.page_content, "document_metadata": doc.metadata}
-    ))
+    kg.nodes.append(
+        Node(
+            type=NodeType.DOCUMENT,
+            properties={
+                "page_content": doc.page_content,
+                "document_metadata": doc.metadata,
+            },
+        )
+    )
 
 
-trans = default_transforms(documents=documents, llm=generator_llm, embedding_model=generator_embeddings)
+trans = default_transforms(
+    documents=documents, llm=generator_llm, embedding_model=generator_embeddings
+)
 
 print("Applying transformations to Knowledge Graph...")
 apply_transforms(kg, trans, run_config=my_run_config)

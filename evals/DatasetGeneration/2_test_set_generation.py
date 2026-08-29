@@ -15,14 +15,14 @@ generate_test_set = ts_config.get("generate_test_set", True)
 test_size = ts_config.get("test_size", 50)
 
 if not generate_test_set:
-    print("generate_test_set is set to False in config.yaml. Exiting test set generation stage.")
+    print(
+        "generate_test_set is set to False in config.yaml. Exiting test set generation stage."
+    )
     sys.exit(0)
 
 from phoenix.otel import register
-tracer_provider = register(
-  project_name="constitution",
-  auto_instrument=True 
-)
+
+tracer_provider = register(project_name="constitution", auto_instrument=True)
 
 import warnings
 from dotenv import load_dotenv
@@ -42,26 +42,32 @@ load_dotenv()
 kg_path = os.path.join(DATA_DIR, "knowledge_graph.json")
 test_set_path = os.path.join(DATA_DIR, "test_set.csv")
 
-generator_embeddings = HuggingFaceEmbeddings(model_name=eval_config["embeddings"]["model_name"])
+generator_embeddings = HuggingFaceEmbeddings(
+    model_name=eval_config["embeddings"]["model_name"]
+)
 generator_embeddings = LangchainEmbeddingsWrapper(generator_embeddings)
 
 generator_llm = ChatBedrockConverse(
     model=eval_config["models"]["llm_model_id"],
-    api_key=os.environ['AWS_BEARER_TOKEN_BEDROCK'],
+    api_key=os.environ["AWS_BEARER_TOKEN_BEDROCK"],
     region_name=eval_config["models"]["region"],
     temperature=eval_config["models"]["llm_temperature"],
-  )
+)
 
 generator_llm = LangchainLLMWrapper(generator_llm)
 
 kg = KnowledgeGraph().load(kg_path)
 
-generator = TestsetGenerator(llm=generator_llm, embedding_model=generator_embeddings, knowledge_graph=kg)
+generator = TestsetGenerator(
+    llm=generator_llm, embedding_model=generator_embeddings, knowledge_graph=kg
+)
 
 query_distribution = default_query_distribution(generator_llm)
 
 print(f"Generating test set (size={test_size})...")
-dataset = generator.generate(testset_size=test_size, query_distribution=query_distribution)
+dataset = generator.generate(
+    testset_size=test_size, query_distribution=query_distribution
+)
 
 # Convert to pandas and save to CSV
 df_dataset = dataset.to_pandas()

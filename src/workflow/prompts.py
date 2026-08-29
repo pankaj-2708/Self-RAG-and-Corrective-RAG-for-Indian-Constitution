@@ -295,6 +295,3 @@ Instructions:
 2. Maintain a clear and professional tone.
 3. Always reply in English.
 """
-
-
-

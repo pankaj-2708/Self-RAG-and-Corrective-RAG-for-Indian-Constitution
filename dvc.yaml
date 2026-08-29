@@ -51,7 +51,7 @@ stages:
     cmd: python ./evals/PipelineLevel/eval.py
     deps:
       - ./evals/PipelineLevel/eval.py
-      - ./data/precision_failure_test_set.csv
+      - ./data/test_set.csv
       - ./src/workflow
     params:
       - pipeline_eval.test_set

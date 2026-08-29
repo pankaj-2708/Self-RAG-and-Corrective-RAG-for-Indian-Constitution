@@ -4,6 +4,7 @@ from pydantic import Field
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
+
 def deduplicate_reducer(existing: List[str], new: List[str]) -> List[str]:
     if existing is None:
         existing = []
@@ -11,7 +12,7 @@ def deduplicate_reducer(existing: List[str], new: List[str]) -> List[str]:
         new = []
 
     # to reset after turn
-    if len(new)!=0 and new[0] == "-1":
+    if len(new) != 0 and new[0] == "-1":
         return []
 
     return list(dict.fromkeys(existing + new))
@@ -27,7 +28,6 @@ def scored_contexts_reducer(existing: List[dict], new: List[dict]) -> List[dict]
     if len(new) != 0 and new[0].get("context") == "-1":
         return []
     return existing + new
-
 
 
 class schema(TypedDict):

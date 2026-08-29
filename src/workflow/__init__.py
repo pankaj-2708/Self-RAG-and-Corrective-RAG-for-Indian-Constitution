@@ -1,5 +1,6 @@
 import os
 import sys
+
 sys.path.append(
     os.path.abspath(
         os.path.join(
@@ -23,24 +24,38 @@ _DEFAULT_DB_PATH = _cfg["workflow"]["db_path"]
 
 from workflow.state import schema
 from workflow.nodes import (
-    retrieval_decider_node, retrieve_node, direct_generation_node,
-    is_relevant_node, answer_from_context_node, check_answer_grounded_node,
-    revise_answer_node, is_answer_relevant_node, rewrite_answer_node, web_search_node,
-    generate_retriever_query_node, generate_web_search_query_node, fanout_relevant_node, aggregate_relevance,
-    fanout_retrieve_node, aggregate_retrieval, memory_node, modify_short_term_memory_node
+    retrieval_decider_node,
+    retrieve_node,
+    direct_generation_node,
+    is_relevant_node,
+    answer_from_context_node,
+    check_answer_grounded_node,
+    revise_answer_node,
+    is_answer_relevant_node,
+    rewrite_answer_node,
+    web_search_node,
+    generate_retriever_query_node,
+    generate_web_search_query_node,
+    fanout_relevant_node,
+    aggregate_relevance,
+    fanout_retrieve_node,
+    aggregate_retrieval,
+    memory_node,
+    modify_short_term_memory_node,
 )
 from workflow.edges import (
-    retrieval_decider_condition, is_relevant_condition,
-    is_grounded_condition, is_answer_relevant_condition, memory_summary_condition
+    retrieval_decider_condition,
+    is_relevant_condition,
+    is_grounded_condition,
+    is_answer_relevant_condition,
+    memory_summary_condition,
 )
 
-if not os.getenv("LANGSMITH_API_KEY") or os.getenv("LANGSMITH_TRACING_V2")=="false":
+if not os.getenv("LANGSMITH_API_KEY") or os.getenv("LANGSMITH_TRACING_V2") == "false":
     try:
         from phoenix.otel import register
-        tracer_provider = register(
-            project_name="constitution",
-            auto_instrument=True 
-        )
+
+        tracer_provider = register(project_name="constitution", auto_instrument=True)
     except ImportError:
         pass
 
@@ -109,12 +124,10 @@ graph.add_edge("rewrite_answer_node", "is_answer_relevant_node")
 graph.add_conditional_edges(
     "memory_node",
     memory_summary_condition,
-    {
-        "summarize": "modify_short_term_memory_node",
-        "end": END
-    }
+    {"summarize": "modify_short_term_memory_node", "end": END},
 )
 graph.add_edge("modify_short_term_memory_node", END)
+
 
 @asynccontextmanager
 async def get_workflow(db_path: str = None):
@@ -123,6 +136,7 @@ async def get_workflow(db_path: str = None):
     async with AsyncSqliteSaver.from_conn_string(db_path) as ck_ptr:
         workflow = graph.compile(checkpointer=ck_ptr)
         yield workflow, ck_ptr
+
 
 # Try compiling a checkpointer-less workflow just for drawing the mermaid graph
 try:

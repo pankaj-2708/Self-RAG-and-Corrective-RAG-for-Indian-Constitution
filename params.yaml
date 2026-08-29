@@ -37,7 +37,7 @@ standalone_generator:
   enabled: false
 
 pipeline_eval:
-  test_set: "sample_test_set.csv"
+  test_set: "test_set.csv"
   output: "pipeline_eval.csv"
   vector_store_name: "constitution_and_ipc.chroma"
   vector_store_collection_name: "constitution_and_ipc"
@@ -55,6 +55,6 @@ pipeline_eval:
   FAITHFULNESS_THRESHOLD: 0.7
   ANSWER_RELEVANCY_THRESHOLD: 0.7
   CONTEXTUAL_RELEVANCY_THRESHOLD: 0.7
-  name: "sample_test_setv2"
+  name: "test_setv2"
   max_retriever_queries: 3
   enabled: true
