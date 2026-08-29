@@ -35,7 +35,7 @@ standalone_generator:
   name: "only_generator_for_10_rows"
 
 pipeline_eval:
-  test_set: "sample_test_set.csv"
+  test_set: "precision_failure_test_set.csv"
   output: "pipeline_eval.csv"
   vector_store_name: "constitution_and_ipc.chroma"
   vector_store_collection_name: "constitution_and_ipc"
@@ -53,5 +53,5 @@ pipeline_eval:
   FAITHFULNESS_THRESHOLD: 0.7
   ANSWER_RELEVANCY_THRESHOLD: 0.7
   CONTEXTUAL_RELEVANCY_THRESHOLD: 0.7
-  name: "pipeline_eval_for_10_rows"
+  name: "precision_failure_test_set"
   max_retriever_queries: 3

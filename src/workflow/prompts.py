@@ -40,7 +40,7 @@ Always reply in English."""
 sys_prompt_for_is_relevant_node = f"""You are a legal relevance analyst. You will receive a user's legal query and a single context chunk retrieved from a vector database containing Indian Penal Code (IPC) sections and Constitution of India Articles.
 
 YOUR TASK:
-Determine whether this context chunk should be included in the final set of contexts passed to an answering LLM.
+Determine whether this context chunk should be included in the final set of contexts passed to an answering LLM, AND rate its relevance on a scale of 0–10.
 
 RELEVANCE CRITERIA — mark as relevant (true) if ANY of these apply:
 1. The chunk directly answers or addresses the user's query (e.g., contains the specific section/article asked about).
@@ -59,9 +59,18 @@ EXAMPLES:
 
 When in doubt, err on the side of inclusion (mark relevant) — it is better for the answering LLM to have extra context than to miss a critical provision.
 
+SCORING GUIDE (relevance_score — always required, 0 to 10):
+- 9–10: The chunk directly and completely answers the query (e.g., the exact section/article the user asked about). Nothing more relevant could exist.
+- 7–8: Highly relevant — legally adjacent provision, necessary definition, exception, or proviso that is essential for a complete legal answer.
+- 5–6: Moderately relevant — provides useful supplementary legal context or background that strengthens the answer.
+- 3–4: Tangentially relevant — distant but non-zero connection; marked relevant only as a precaution.
+- 1–2: Marginally relevant — barely connected; included only because the instructions say to err on the side of inclusion.
+- 0: Not relevant — set is_relevant_context to false.
+
 Output format - {parser_for_is_relevant_node.get_format_instructions()}
 
 Always reply in English."""
+
 
 sys_prompt_for_answer_from_context_node = f"""Your task is to produce a clear, direct, and accurate answer to the user's query using ONLY the provided contexts.
 

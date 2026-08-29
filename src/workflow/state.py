@@ -17,6 +17,19 @@ def deduplicate_reducer(existing: List[str], new: List[str]) -> List[str]:
     return list(dict.fromkeys(existing + new))
 
 
+def scored_contexts_reducer(existing: List[dict], new: List[dict]) -> List[dict]:
+    """Accumulates {score, context} dicts from each is_relevant_node fan-out.
+    Resets on a sentinel dict where context == '-1'."""
+    if existing is None:
+        existing = []
+    if new is None:
+        new = []
+    if len(new) != 0 and new[0].get("context") == "-1":
+        return []
+    return existing + new
+
+
+
 class schema(TypedDict):
     retrieval_required: Literal["retrieval", "web_search", "None"]
     web_searched: bool
@@ -25,6 +38,7 @@ class schema(TypedDict):
     web_search_queries: Optional[List[str]]
     retrieved_contexts: Annotated[List[str], deduplicate_reducer]
     relevant_contexts: Annotated[List[str], deduplicate_reducer]
+    scored_relevant_contexts: Annotated[List[dict], scored_contexts_reducer]
     answer_for_query: str
     generated_response: str
     is_grounded: Literal["fully_supported", "not_fully_supported"]

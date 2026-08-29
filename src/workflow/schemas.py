@@ -11,6 +11,17 @@ parser_for_retrieval_decider_node = PydanticOutputParser(
 
 class schema_for_is_relevant_node(BaseModel):
     is_relevant_context: bool
+    relevance_score: int = Field(
+        ...,
+        description=(
+            "Relevance score from 0 to 10 indicating how strongly this context addresses the query. "
+            "10 = perfectly addresses the exact question. "
+            "0 = completely unrelated. "
+            "Must always be provided regardless of is_relevant_context."
+        ),
+        ge=0,
+        le=10,
+    )
 
 parser_for_is_relevant_node = PydanticOutputParser(
     pydantic_object=schema_for_is_relevant_node

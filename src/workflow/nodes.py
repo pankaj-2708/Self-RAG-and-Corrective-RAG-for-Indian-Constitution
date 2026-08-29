@@ -64,9 +64,10 @@ async def retrieval_decider_node(state: schema):
         "retrieval_required": res,
         "input_tokens": usage.get("input_tokens", 0),
         "output_tokens": usage.get("output_tokens", 0),
-        # to empty them
-        "retrieved_contexts":["-1"],
-            "relevant_contexts":["-1"]
+        # reset all context accumulators at the start of each turn
+        "retrieved_contexts": ["-1"],
+        "relevant_contexts": ["-1"],
+        "scored_relevant_contexts": [{"context": "-1", "score": -1}],
     }
 
 async def generate_retriever_query_node(state: schema):
@@ -196,18 +197,31 @@ async def is_relevant_node(inp):
     )
     usage = response.usage_metadata or {}
     res = await parser_for_is_relevant_node.ainvoke(response.content)
-    
+
     out = {
         "input_tokens": usage.get("input_tokens", 0),
-        "output_tokens": usage.get("output_tokens", 0)
+        "output_tokens": usage.get("output_tokens", 0),
     }
-    if res.is_relevant_context :
-        out["relevant_contexts"] = [inp['context']]
+    if res.is_relevant_context:
+        # Write to scored buffer; aggregate_relevance will sort and write to relevant_contexts
+        out["scored_relevant_contexts"] = [
+            {"score": res.relevance_score, "context": inp["context"]}
+        ]
     return out
 
 def aggregate_relevance(state):
-    # Deduplication is now handled by the custom state reducer.
-    return {}
+    """Sort all relevant contexts by descending relevance score, then
+    write them to relevant_contexts in that order."""
+    scored = state.get("scored_relevant_contexts") or []
+    # Sort descending — highest relevance score first
+    sorted_scored = sorted(scored, key=lambda x: x["score"], reverse=True)
+    sorted_contexts = [item["context"] for item in sorted_scored]
+    return {
+        "relevant_contexts": sorted_contexts,
+        # Reset the scored buffer so it doesn't bleed into the next turn
+        "scored_relevant_contexts": [{"context": "-1", "score": -1}],
+    }
+
 
 async def answer_from_context_node(state: schema):
     contexts = state["relevant_contexts"]

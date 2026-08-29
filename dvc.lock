@@ -67,19 +67,19 @@ stages:
   pipeline_eval:
     cmd: python ./evals/PipelineLevel/eval.py
     deps:
-    - path: ./data/sample_test_set.csv
+    - path: ./data/precision_failure_test_set.csv
       hash: md5
-      md5: 927d80b4a47a7b075a1da3d821b07254
-      size: 6193
+      md5: cf03d35abac077f2f9a4f5e0d726059c
+      size: 17966
     - path: ./evals/PipelineLevel/eval.py
       hash: md5
-      md5: 01cf1c855f80701d39e9bf44253656ca
-      size: 10067
+      md5: a1de386486fba4e2cbe810e40fa35dd9
+      size: 10153
     - path: ./src/workflow
       hash: md5
-      md5: e8b1906faa96f4af0a44af14ef81b1d2.dir
-      size: 189361
-      nfiles: 23
+      md5: 226bf325b632ab26913f0b7f84d0930f.dir
+      size: 228832
+      nfiles: 27
     params:
       params.yaml:
         pipeline_eval.ANSWER_RELEVANCY_THRESHOLD: 0.7
@@ -92,15 +92,15 @@ stages:
         pipeline_eval.llm_model_id: deepseek.v3.2
         pipeline_eval.llm_temperature: 0.0
         pipeline_eval.models.region: us-east-1
-        pipeline_eval.name: pipeline_eval_for_full_test_set
+        pipeline_eval.name: precision_failure_test_set
         pipeline_eval.output: pipeline_eval.csv
         pipeline_eval.region: us-east-1
         pipeline_eval.search_type: similarity
-        pipeline_eval.test_set: sample_test_set.csv
+        pipeline_eval.test_set: precision_failure_test_set.csv
         pipeline_eval.vector_store_collection_name: constitution_and_ipc
         pipeline_eval.vector_store_name: constitution_and_ipc.chroma
     outs:
     - path: ./data/pipeline_eval.csv
       hash: md5
-      md5: db5480b2fe1d1f4da819b3792ff76f23
-      size: 8277
+      md5: c4d977aeb2fef3a09fc59af233ed2e3c
+      size: 54303
