@@ -3,24 +3,25 @@ stages:
   standalone_retriever:
     cmd: python ./evals/Component_level/0_retriever.py
     deps:
-    - path: ./data/sample_test_set.csv
+    - path: ./data/test_set.csv
       hash: md5
-      md5: 927d80b4a47a7b075a1da3d821b07254
-      size: 6193
+      md5: 94a8296eb1015bd1ba917993b363929c
+      size: 134113
     - path: ./evals/Component_level/0_retriever.py
       hash: md5
-      md5: 40105d2ec6094e828f34a2d39c824d63
-      size: 7975
+      md5: 70d6e7b10313f869ce033e1260a1591d
+      size: 7832
     params:
       params.yaml:
         standalone_retriever.PRECISION_THRESHOLD: 0.7
         standalone_retriever.RECALL_THRESHOLD: 0.7
         standalone_retriever.embeddings.model_name: amazon.titan-embed-text-v2:0
+        standalone_retriever.enabled: false
         standalone_retriever.k: 3
         standalone_retriever.llm_model_id: deepseek.v3.2
         standalone_retriever.llm_temperature: 0.0
         standalone_retriever.models.region: us-east-1
-        standalone_retriever.name: only_retriever_for_full_test_set
+        standalone_retriever.name: only_retriever_for_10_rows
         standalone_retriever.output: standalone_retriever_eval.csv
         standalone_retriever.region: us-east-1
         standalone_retriever.search_type: similarity
@@ -30,29 +31,30 @@ stages:
     outs:
     - path: ./data/standalone_retriever_eval.csv
       hash: md5
-      md5: fba78513d67709e56f9200da9bfce869
-      size: 10795
+      md5: 81051bcc2cf1bedf378224b0a93e2877
+      size: 2
   standalone_generator:
     cmd: python ./evals/Component_level/1_generator.py
     deps:
-    - path: ./data/sample_test_set.csv
+    - path: ./data/test_set.csv
       hash: md5
-      md5: 927d80b4a47a7b075a1da3d821b07254
-      size: 6193
+      md5: 94a8296eb1015bd1ba917993b363929c
+      size: 134113
     - path: ./evals/Component_level/1_generator.py
       hash: md5
-      md5: 3a77075dd67ece62767c761e86807ec2
-      size: 8752
+      md5: a72365c093d597bfae10ea813912005a
+      size: 8927
     params:
       params.yaml:
         standalone_generator.ANSWER_RELEVANCY_THRESHOLD: 0.7
         standalone_generator.FAITHFULNESS_THRESHOLD: 0.7
         standalone_generator.embeddings.model_name: amazon.titan-embed-text-v2:0
+        standalone_generator.enabled: false
         standalone_generator.k: 3
         standalone_generator.llm_model_id: deepseek.v3.2
         standalone_generator.llm_temperature: 0.0
         standalone_generator.models.region: us-east-1
-        standalone_generator.name: only_generator_for_full_test_set
+        standalone_generator.name: only_generator_for_10_rows
         standalone_generator.output: standalone_generator_eval.csv
         standalone_generator.region: us-east-1
         standalone_generator.search_type: similarity
@@ -62,8 +64,8 @@ stages:
     outs:
     - path: ./data/standalone_generator_eval.csv
       hash: md5
-      md5: 354e54d5d5b13a4eb2828bce60c32e68
-      size: 12155
+      md5: 81051bcc2cf1bedf378224b0a93e2877
+      size: 2
   pipeline_eval:
     cmd: python ./evals/PipelineLevel/eval.py
     deps:
@@ -77,8 +79,8 @@ stages:
       size: 10153
     - path: ./src/workflow
       hash: md5
-      md5: 226bf325b632ab26913f0b7f84d0930f.dir
-      size: 228832
+      md5: 9baa31e3e34d61313abf7e38642baf0d.dir
+      size: 236582
       nfiles: 27
     params:
       params.yaml:
@@ -92,15 +94,15 @@ stages:
         pipeline_eval.llm_model_id: deepseek.v3.2
         pipeline_eval.llm_temperature: 0.0
         pipeline_eval.models.region: us-east-1
-        pipeline_eval.name: precision_failure_test_set
+        pipeline_eval.name: recall_failure_test_case
         pipeline_eval.output: pipeline_eval.csv
         pipeline_eval.region: us-east-1
         pipeline_eval.search_type: similarity
-        pipeline_eval.test_set: precision_failure_test_set.csv
+        pipeline_eval.test_set: recall_failure_test_case.csv
         pipeline_eval.vector_store_collection_name: constitution_and_ipc
         pipeline_eval.vector_store_name: constitution_and_ipc.chroma
     outs:
     - path: ./data/pipeline_eval.csv
       hash: md5
-      md5: c4d977aeb2fef3a09fc59af233ed2e3c
-      size: 54303
+      md5: 9228676ea9956c3b956379681dcb5768
+      size: 76948

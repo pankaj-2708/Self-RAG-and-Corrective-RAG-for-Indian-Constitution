@@ -19,6 +19,7 @@ stages:
       - standalone_retriever.RECALL_THRESHOLD
       - standalone_retriever.PRECISION_THRESHOLD
       - standalone_retriever.name
+      - standalone_retriever.enabled
     outs:
       - ./data/standalone_retriever_eval.csv
 
@@ -42,6 +43,7 @@ stages:
       - standalone_generator.FAITHFULNESS_THRESHOLD
       - standalone_generator.ANSWER_RELEVANCY_THRESHOLD
       - standalone_generator.name
+      - standalone_generator.enabled
     outs:
       - ./data/standalone_generator_eval.csv
 
@@ -69,5 +71,6 @@ stages:
       - pipeline_eval.ANSWER_RELEVANCY_THRESHOLD
       - pipeline_eval.CONTEXTUAL_RELEVANCY_THRESHOLD
       - pipeline_eval.name
+      - pipeline_eval.enabled
     outs:
       - ./data/pipeline_eval.csv

@@ -1,16 +1,7 @@
 import os
-import sys
 import yaml
-import mlflow
 import pandas as pd
-import asyncio
-import uuid
-import time
-from dotenv import load_dotenv
-
-load_dotenv()
-
-mlflow.set_tracking_uri("https://dagshub.com/pankaj-2708/Self-RAG-and-Corrective-RAG-for-Indian-Constitution.mlflow")
+import sys
 
 # Resolve paths and check execution parameter before loading heavy modules or telemetry
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -20,6 +11,30 @@ if PROJECT_ROOT not in sys.path:
 
 DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../data"))
 PARAMS_PATH = os.path.abspath(os.path.join(DATA_DIR, "../params.yaml"))
+
+with open(PARAMS_PATH, "r") as f:
+    params = yaml.safe_load(f)['pipeline_eval']
+
+TEST_SET_PATH = os.path.abspath(os.path.join(DATA_DIR, params['test_set']))
+OUTPUT_PATH = os.path.abspath(os.path.join(DATA_DIR, params['output']))
+
+if not params['enabled']:
+    print("Pipeline evaluation is disabled. Set 'enabled' to True in params.yaml to enable it.")
+    # create an empty csv file
+    pd.DataFrame().to_csv(OUTPUT_PATH, index=False)
+    exit(0)
+
+
+import mlflow
+import asyncio
+import uuid
+import time
+from dotenv import load_dotenv
+
+load_dotenv()
+
+mlflow.set_tracking_uri("https://dagshub.com/pankaj-2708/Self-RAG-and-Corrective-RAG-for-Indian-Constitution.mlflow")
+
 
 from deepeval import evaluate
 from deepeval.test_case import LLMTestCase
@@ -44,12 +59,6 @@ if not os.getenv("LANGSMITH_API_KEY") or os.getenv("LANGSMITH_TRACING_V2") == "f
         )
     except ImportError:
         pass
-
-with open(PARAMS_PATH, "r") as f:
-    params = yaml.safe_load(f)['pipeline_eval']
-
-TEST_SET_PATH = os.path.abspath(os.path.join(DATA_DIR, params['test_set']))
-OUTPUT_PATH = os.path.abspath(os.path.join(DATA_DIR, params['output']))
 
 judge_model = AmazonBedrockModel(
     model=params["llm_model_id"],

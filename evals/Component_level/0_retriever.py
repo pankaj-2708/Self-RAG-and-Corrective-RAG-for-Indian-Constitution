@@ -1,8 +1,24 @@
 import os
-import sys
 import yaml
-import mlflow
 import pandas as pd
+# Resolve paths and check execution parameter before loading heavy modules or telemetry
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../data"))
+PARAMS_PATH = os.path.abspath(os.path.join(DATA_DIR, "../params.yaml"))
+with open(PARAMS_PATH, "r") as f:
+    params = yaml.safe_load(f)['standalone_retriever']
+    
+TEST_SET_PATH = os.path.abspath(os.path.join(DATA_DIR, params['test_set']))
+OUTPUT_PATH = os.path.abspath(os.path.join(DATA_DIR, params['output']))
+
+if not params['enabled'] :
+    print("Standalone retriever evaluation is disabled. Set 'enabled' to True in params.yaml to enable it.")
+    # create an empty csv file
+    pd.DataFrame().to_csv(OUTPUT_PATH, index=False)
+    exit(0)
+
+import sys
+import mlflow
 import time
 from langchain_chroma import Chroma
 from langchain_aws import ChatBedrockConverse, BedrockEmbeddings
@@ -27,16 +43,7 @@ if not os.getenv("LANGSMITH_API_KEY") or os.getenv("LANGSMITH_TRACING_V2")=="fal
 mlflow.set_tracking_uri("https://dagshub.com/pankaj-2708/Self-RAG-and-Corrective-RAG-for-Indian-Constitution.mlflow")
 mlflow.set_experiment("constitution-rag")
 
-# Resolve paths and check execution parameter before loading heavy modules or telemetry
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../data"))
-PARAMS_PATH = os.path.abspath(os.path.join(DATA_DIR, "../params.yaml"))
 
-with open(PARAMS_PATH, "r") as f:
-    params = yaml.safe_load(f)['standalone_retriever']
-
-TEST_SET_PATH = os.path.abspath(os.path.join(DATA_DIR, params['test_set']))
-OUTPUT_PATH = os.path.abspath(os.path.join(DATA_DIR, params['output']))
 
 
 vector_store_path = os.path.abspath(os.path.join(DATA_DIR, params['vector_store_name']))
