@@ -3,7 +3,8 @@
   <img src="https://img.shields.io/badge/LangGraph-Agentic_Workflow-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white" />
   <img src="https://img.shields.io/badge/DeepSeek_R1_&_V3-AWS_Bedrock-FF9900?style=for-the-badge&logo=amazonwebservices&logoColor=white" />
   <img src="https://img.shields.io/badge/ChromaDB-Vector_Store-00AA6C?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/Ragas-Evaluation-EF4444?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/DeepEval-Evaluation-EF4444?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/MLflow-Experiment_Tracking-0194E2?style=for-the-badge&logo=mlflow&logoColor=white" />
   <img src="https://img.shields.io/badge/DVC-Reproducible_Pipelines-13ADC7?style=for-the-badge&logo=dvc&logoColor=white" />
   <img src="https://img.shields.io/badge/Docker-Containerized-2496ED?style=for-the-badge&logo=docker&logoColor=white" />
   <img src="https://img.shields.io/badge/AWS_EC2-Deployed-FF9900?style=for-the-badge&logo=amazonec2&logoColor=white" />
@@ -13,10 +14,6 @@
 
 <p align="center">
   <em>An agentic, self-correcting Retrieval-Augmented Generation system that delivers reliable, grounded answers on Indian law — powered by LangGraph, DeepSeek R1/V3, and multi-stage validation.</em>
-</p>
-
-<p align="center">
-  <a href="http://44.195.222.151:5173"><strong>🚀 Try the Live Demo →</strong></a>
 </p>
 
 ---
@@ -36,25 +33,113 @@ Unlike vanilla RAG, this system **self-evaluates and self-corrects** at every st
 
 ---
 
-## Demo
+## Evaluation
 
-> **Live at: [http://44.195.222.151:5173](http://44.195.222.151:5173)** — deployed on AWS EC2 via Docker Compose with CI/CD.
+A three-tier evaluation framework built with [DeepEval](https://docs.confident-ai.com/) measures the system at the **component**, **dataset generation**, and **full pipeline** level. All experiments are tracked with [MLflow](https://mlflow.org/) on [DagsHub](https://dagshub.com/), and the entire workflow is reproducible via [DVC](https://dvc.org/).
 
-### CLI Interface
+### Pipeline-Level Results
 
-<p align="center">
-  <img src="assets/demo_cli.png" alt="CLI Demo" width="85%" />
-  <br />
-  <sub>Rich-powered terminal interface with streaming responses and conversation memory</sub>
-</p>
+> End-to-end evaluation across the full LangGraph workflow with all self-correction loops active.
 
-### Web Frontend — "Samvidhan"
+| Metric | Score |
+|---|---|
+| **Contextual Precision** | 0.96 |
+| **Faithfulness** | 0.95 |
+| **Answer Relevancy** | 0.94 |
+| **Contextual Recall** | 0.93 |
+| **Contextual Relevancy** | 0.76 |*
 
-<p align="center">
-  <img src="assets/demo_frontend.png" alt="Frontend Demo" width="85%" />
-  <br />
-  <sub>React chat interface with real-time SSE streaming, live node-by-node progress visualization, dark/light theme, and session management</sub>
-</p>
+*\*Note on Contextual Relevancy: This score is lower because the system uses entire articles or sections as single chunks to preserve legal context and structural integrity. Implementing character-wise chunking would improve this metric, but would break the logical structure of the legal texts.*
+
+### Latency Benchmarks
+
+| Percentile | Latency |
+|---|---|
+| **p50** | 21.0 s |
+| **p90** | 47.6 s |
+| **p95** | 68.8 s |
+| **p99** | 89.1 s |
+| **avg** | 25.8 s |
+
+> The high-tail latencies reflect queries that trigger the self-correction loop (grounding revision + answer rewrite), which adds multiple sequential LLM calls.
+
+### Token Usage (For 50 questions present in test_set.csv)
+
+| Metric | Value |
+|---|---|
+| **Total tokens** | ~666K |
+| **Input tokens** | ~520K |
+| **Output tokens** | ~147K |
+| **Avg tokens per query** | ~10.2K input |
+
+### Evaluation Tiers
+
+```mermaid
+graph LR
+    A["Dataset Generation<br/>(Clustering → KG → Test Set)"] --> B["Component-Level<br/>(Retriever · Generator)"]
+    B --> C["Pipeline-Level<br/>(End-to-End)"]
+    C --> D["MLflow + DagsHub<br/>(Tracking & Comparison)"]
+
+    style A fill:#164e63,stroke:#22d3ee,color:#cffafe
+    style B fill:#713f12,stroke:#fbbf24,color:#fef3c7
+    style C fill:#1a4731,stroke:#34d399,color:#d1fae5
+    style D fill:#2d1b69,stroke:#a78bfa,color:#e0d4ff
+```
+
+#### 1. Dataset Generation (`evals/DatasetGeneration/`)
+
+Automated test set creation — no manual question authoring required:
+
+1. **K-Means Clustering** ([`0_clustering.py`](evals/DatasetGeneration/0_clustering.py)) — All document chunks are embedded using `all-mpnet-base-v2`, then K-means clustering is run (sweeping k=4–24, selecting optimal k via silhouette score). Stratified sampling from each cluster produces a representative subset.
+
+2. **Knowledge Graph Construction** ([`1_knowledge_graph.py`](evals/DatasetGeneration/1_knowledge_graph.py)) — A knowledge graph is built from the document corpus using Ragas's `KnowledgeGraph` API, capturing entity and relationship structure across the legal texts.
+
+3. **Synthetic Test Set Generation** ([`2_test_set_generation.py`](evals/DatasetGeneration/2_test_set_generation.py)) — Using Ragas's `TestsetGenerator` with the knowledge graph and sampled documents, diverse evaluation queries (single-hop, multi-hop, etc.) are generated along with reference answers and reference contexts.
+
+#### 2. Component-Level Evaluation (`evals/Component_level/`)
+
+Isolates and evaluates individual components against the test set:
+
+| Script | Component | Metrics |
+|---|---|---|
+| [`0_retriever.py`](evals/Component_level/0_retriever.py) | Retriever only | Contextual Recall, Contextual Precision |
+| [`1_generator.py`](evals/Component_level/1_generator.py) | Retriever + Generator (no self-correction) | Faithfulness, Answer Relevancy |
+
+#### 3. Pipeline-Level Evaluation (`evals/PipelineLevel/`)
+
+End-to-end evaluation of the full LangGraph workflow with all self-correction loops active:
+
+| Script | Metrics |
+|---|---|
+| [`eval.py`](evals/PipelineLevel/eval.py) | Contextual Recall, Contextual Precision, Faithfulness, Answer Relevancy, Contextual Relevancy |
+
+Each evaluation script logs params, metrics, latency stats, token usage, and result CSVs to **MLflow on DagsHub** for experiment comparison.
+
+### Running Evaluations
+
+#### With DVC (recommended — fully reproducible)
+
+```bash
+dvc repro
+```
+
+This re-runs only the stages whose inputs or parameters have changed. The 3 DVC stages are:
+
+| Stage | Script | Controlled by |
+|---|---|---|
+| `standalone_retriever` | `evals/Component_level/0_retriever.py` | `params.yaml → standalone_retriever.enabled` |
+| `standalone_generator` | `evals/Component_level/1_generator.py` | `params.yaml → standalone_generator.enabled` |
+| `pipeline_eval` | `evals/PipelineLevel/eval.py` | `params.yaml → pipeline_eval.enabled` |
+
+Each stage can be individually enabled/disabled via the `enabled` flag in `params.yaml`.
+
+#### Directly
+
+```bash
+python evals/PipelineLevel/eval.py
+python evals/Component_level/0_retriever.py
+python evals/Component_level/1_generator.py
+```
 
 ---
 
@@ -184,9 +269,32 @@ graph TD
 | **Answer Relevance Loop** | A judge model evaluates if the final answer actually addresses the user's query; irrelevant answers are rewritten |
 | **Conversational Memory** | SQLite-backed state checkpointing with rolling summarization preserves multi-turn context across sessions |
 | **Observability** | Arize Phoenix integration provides full tracing of every LLM call, retrieval, and decision |
-| **Automated Evaluation** | End-to-end Ragas evaluation pipeline with faithfulness, answer relevancy, context precision, and context recall |
+| **Three-Tier Evaluation** | Component-level (retriever, generator) and pipeline-level evaluation using DeepEval with automated test set generation |
+| **Experiment Tracking** | MLflow on DagsHub tracks params, metrics, latencies, and artifacts across evaluation runs |
 | **Containerized Deployment** | Dockerized backend and frontend with Docker Compose orchestration |
-| **CI/CD Pipeline** | GitHub Actions workflow builds images, pushes to AWS ECR, and deploys to EC2 via self-hosted runner |
+| **CI/CD Pipeline** | GitHub Actions workflow runs evaluations, builds images, pushes to AWS ECR, and deploys to EC2 |
+
+---
+
+## Demo
+
+> Deployed on **AWS EC2** via Docker Compose with CI/CD.
+
+### CLI Interface
+
+<p align="center">
+  <img src="assets/demo_cli.png" alt="CLI Demo" width="85%" />
+  <br />
+  <sub>Rich-powered terminal interface with streaming responses and conversation memory</sub>
+</p>
+
+### Web Frontend — "Samvidhan"
+
+<p align="center">
+  <img src="assets/demo_frontend.png" alt="Frontend Demo" width="85%" />
+  <br />
+  <sub>React chat interface with real-time SSE streaming, live node-by-node progress visualization, dark/light theme, and session management</sub>
+</p>
 
 ---
 
@@ -200,39 +308,46 @@ graph TD
 | **Vector Store** | [ChromaDB](https://www.trychroma.com/) — persistent local vector database |
 | **Web Search** | [Tavily Search API](https://tavily.com/) — real-time web search fallback |
 | **Observability** | [Arize Phoenix](https://phoenix.arize.com/) — LLM tracing & monitoring |
-| **Evaluation** | [Ragas](https://docs.ragas.io/) — faithfulness, relevancy, context recall & precision |
+| **Evaluation** | [DeepEval](https://docs.confident-ai.com/) — contextual recall, precision, faithfulness, answer relevancy, contextual relevancy |
+| **Experiment Tracking** | [MLflow](https://mlflow.org/) on [DagsHub](https://dagshub.com/) — params, metrics, latency, and artifact tracking |
+| **Dataset Generation** | [Ragas](https://docs.ragas.io/) — knowledge graph construction & synthetic test set generation |
 | **Pipeline Reproducibility** | [DVC](https://dvc.org/) — versioned, reproducible evaluation pipeline |
 | **CLI** | [Rich](https://github.com/Textualize/rich) — beautiful terminal interface with streaming |
 | **Package Manager** | [uv](https://github.com/astral-sh/uv) — fast Python package management |
 | **Backend API** | [FastAPI](https://fastapi.tiangolo.com/) — async REST API with streaming SSE support |
 | **Frontend** | [React](https://react.dev/) + [Vite](https://vitejs.dev/) — "Samvidhan" chat interface with SSE streaming, live node progress, and [marked](https://marked.js.org/) for markdown rendering |
 | **Containerization** | [Docker](https://www.docker.com/) + [Docker Compose](https://docs.docker.com/compose/) — multi-container orchestration |
-| **CI/CD** | [GitHub Actions](https://github.com/features/actions) — build, push to [AWS ECR](https://aws.amazon.com/ecr/), deploy to EC2 |
+| **CI/CD** | [GitHub Actions](https://github.com/features/actions) — eval → build → push to [AWS ECR](https://aws.amazon.com/ecr/) → deploy to EC2 |
 
 ---
 
 ## Project Structure
 
 ```
-constitution_rag/
+constitution_rag_eval/
 ├── src/
 │   ├── cli.py                          # Interactive terminal interface (Rich-based)
 │   ├── create_vector_store.py          # Data ingestion → ChromaDB (Titan Embed v2)
-│   ├── workflow/
-│   │   ├── __init__.py                 # Graph construction & compilation (16 nodes)
-│   │   ├── state.py                    # TypedDict state schema with custom reducers
-│   │   ├── nodes.py                    # All node implementations (16 nodes)
-│   │   ├── edges.py                    # Conditional edge routing logic (5 conditions)
-│   │   ├── config.py                   # LLM clients, vector store, search tools
-│   │   ├── config.yaml                 # Model IDs, temperatures, embedding config
-│   │   ├── prompts.py                  # System prompts for every node
-│   │   └── schemas.py                  # Pydantic schemas for structured output
-│   └── evaluation/
-│       ├── evaluate.py                 # End-to-end Ragas evaluation pipeline
-│       ├── test_set_generation.py      # Synthetic test set generator
-│       ├── clustering.py               # K-means clustering for test diversity
-│       ├── knowledge_graph.py          # Knowledge graph construction
-│       └── config.yaml                 # Evaluation-specific model & param config
+│   └── workflow/
+│       ├── __init__.py                 # Graph construction & compilation (16 nodes)
+│       ├── state.py                    # TypedDict state schema with custom reducers
+│       ├── nodes.py                    # All node implementations (16 nodes)
+│       ├── edges.py                    # Conditional edge routing logic (5 conditions)
+│       ├── config.py                   # LLM clients, vector store, search tools
+│       ├── config.yaml                 # Model IDs, temperatures, embedding config
+│       ├── prompts.py                  # System prompts for every node
+│       └── schemas.py                  # Pydantic schemas for structured output
+├── evals/
+│   ├── DatasetGeneration/
+│   │   ├── 0_clustering.py             # K-means clustering for test set diversity
+│   │   ├── 1_knowledge_graph.py        # Knowledge graph construction (Ragas)
+│   │   ├── 2_test_set_generation.py    # Synthetic test set generator (Ragas)
+│   │   └── config.yaml                 # Dataset generation & evaluation config
+│   ├── Component_level/
+│   │   ├── 0_retriever.py              # Standalone retriever evaluation
+│   │   └── 1_generator.py              # Standalone generator evaluation
+│   └── PipelineLevel/
+│       └── eval.py                     # End-to-end pipeline evaluation
 ├── Backend/
 │   ├── main.py                         # FastAPI server with streaming SSE endpoints
 │   ├── config.yaml                     # Pipeline defaults (k, retries, memory turns)
@@ -263,6 +378,7 @@ constitution_rag/
 │   ├── articles.json                   # Constitution of India articles
 │   ├── penal_code_sections.json        # IPC sections
 │   ├── constitution_and_ipc.chroma/    # Persisted ChromaDB vector store
+│   ├── knowledge_graph.json            # Ragas knowledge graph (for test set generation)
 │   └── test_set.csv                    # Evaluation test set
 ├── notebooks/
 │   ├── data_collector.ipynb            # Web scraping & data preparation
@@ -271,15 +387,17 @@ constitution_rag/
 │   └── ragas_results.ipynb             # Evaluation results analysis
 ├── .github/
 │   └── workflows/
-│       └── ci_cd.yml                   # GitHub Actions: build → ECR → deploy to EC2
+│       └── ci_cd.yml                   # GitHub Actions: eval → build → ECR → deploy
 ├── assets/
 │   ├── demo_cli.png                    # CLI demo screenshot
 │   └── demo_frontend.png              # Frontend demo screenshot
 ├── compose.yaml                        # Docker Compose (backend + frontend)
-├── dvc.yaml                            # DVC pipeline definition (evaluation stages)
+├── dvc.yaml                            # DVC pipeline definition (3 evaluation stages)
 ├── dvc.lock                            # DVC lock file (reproducibility snapshot)
 ├── params.yaml                         # DVC stage parameters & toggles
-├── pyproject.toml                      # Project config & dependencies
+├── pyproject.toml                      # Project config & dependencies (uv)
+├── requirements.txt                    # CI/CD dependencies (pip)
+├── workflow_image.png                  # Auto-generated workflow graph image
 ├── .env                                # API keys (not committed)
 └── README.md
 ```
@@ -331,6 +449,10 @@ LANGSMITH_TRACING_V2="true"
 LANGSMITH_ENDPOINT="https://api.smith.langchain.com"
 LANGSMITH_API_KEY="your-langsmith-api-key"
 LANGSMITH_PROJECT="constitution"
+
+# MLflow on DagsHub (optional — for evaluation tracking)
+MLFLOW_TRACKING_USERNAME="your-dagshub-username"
+MLFLOW_TRACKING_PASSWORD="your-dagshub-token"
 ```
 
 ### 4. Build the Vector Store
@@ -395,13 +517,12 @@ The `compose.yaml` orchestrates two services:
 
 ### CI/CD Pipeline
 
-Every push to the repository triggers a **GitHub Actions** workflow (`.github/workflows/ci_cd.yml`) that:
+Every push to `main` triggers a **GitHub Actions** workflow (`.github/workflows/ci_cd.yml`) that:
 
-1. **Builds** Docker images for both backend and frontend
-2. **Pushes** images to **AWS ECR** (Elastic Container Registry)
-3. **Deploys** to EC2 via a **self-hosted runner** using `docker compose pull && docker compose up -d`
-
-> The live deployment is accessible at **[http://44.195.222.151:5173](http://44.195.222.151:5173)**
+1. **Runs evaluations** — `dvc repro` executes enabled evaluation stages and logs results to MLflow/DagsHub
+2. **Builds** Docker images for both backend and frontend
+3. **Pushes** images to **AWS ECR** (Elastic Container Registry)
+4. **Deploys** to EC2 via a **self-hosted runner** using `docker compose pull && docker compose up -d`
 
 ---
 
@@ -418,102 +539,13 @@ The raw data was scraped, cleaned, and structured into JSON format via the [`dat
 
 ---
 
-## Evaluation
-
-[Ragas](https://docs.ragas.io/) is used end-to-end — not just for scoring, but for building the evaluation dataset itself.
-
-### Evaluation Methodology
-
-1. **Knowledge Graph Construction** — A knowledge graph is first built from the document corpus (Constitution articles & IPC sections) using Ragas's `KnowledgeGraph` API, capturing entity and relationship structure across the legal texts. ([`knowledge_graph.py`](src/evaluation/knowledge_graph.py))
-
-2. **K-Means Clustering for Diverse Sampling** — To ensure the test set covers the full breadth of the corpus, all document chunks are embedded using `all-mpnet-base-v2`, then K-means clustering is run (sweeping k=4–24, selecting optimal k via silhouette score). Stratified sampling from each cluster produces a representative subset of 100 documents. ([`clustering.py`](src/evaluation/clustering.py))
-
-3. **Synthetic Test Set Generation** — Using Ragas's `TestsetGenerator` with the knowledge graph and the sampled documents, diverse evaluation queries (single-hop, multi-hop, etc.) are generated along with reference answers and reference contexts — no manual question authoring required. ([`test_set_generation.py`](src/evaluation/test_set_generation.py))
-
-4. **End-to-End Evaluation** — Each test query is run through the full LangGraph pipeline, and the generated answer + retrieved contexts are scored by Ragas across four metrics. **Evaluation is performed on a 50-row dataset.** Results are versioned, resumable, and saved with full per-query metadata. ([`evaluate.py`](src/evaluation/evaluate.py))
-
-5. **DVC Pipeline for Reproducibility** — The entire evaluation workflow (knowledge graph → clustering → test set generation → scoring) is tracked and reproducible via a [DVC](https://dvc.org/) pipeline (`dvc.yaml`). Running `dvc repro` re-executes only the stages whose inputs have changed, ensuring consistent, auditable results.
-
-### Metrics
-
-| Metric | What it measures |
-|---|---|
-| **Faithfulness** | Is the answer factually consistent with the retrieved context? |
-| **Answer Relevancy** | Does the answer address the user's question? |
-| **Context Precision** | Are the retrieved documents relevant to the question? (Non-LLM, reference-based) |
-| **Context Recall** | Were all necessary reference documents retrieved? |
-
-### Results
-
-> Evaluated on a **50-row test set** generated from the Constitution of India & IPC corpus.
-
-| Metric | Score |
-|---|---|
-| **Faithfulness** | 0.96 |
-| **Answer Relevancy** | 0.75 |
-| **Context Precision** (Non-LLM, reference-based) | 0.95 |
-| **Context Recall** | 0.90 |
-
-### Token Usage
-
-Total tokens consumed across knowledge graph construction, synthetic test set generation, and end-to-end evaluation:
-
-| Scope | Tokens |
-|---|---|
-| **Total (all stages combined)** | ~1.17 million |
-
-### Latency Benchmarks
-
-End-to-end pipeline latency measured across the 50 evaluation queries:
-
-| Percentile | Latency |
-|---|---|
-| **p50** | 2.11 s |
-| **p75** | 3.03 s |
-| **p90** | 16 s |
-| **p95** | 81.8 s |
-
-> The high p95 latency reflects queries that trigger the self-correction loop (grounding revision + answer rewrite), which adds multiple sequential LLM calls.
-
-### Running the Evaluation
-
-#### With DVC (recommended — fully reproducible)
-
-```bash
-dvc repro
-```
-
-This re-runs only the stages whose inputs or parameters have changed. Outputs and metrics are tracked automatically.
-
-#### Directly
-
-```bash
-python src/evaluation/evaluate.py
-```
-
-> Results are versioned and saved to `data/evaluation_progress_results/`. The pipeline supports **resumable runs** — if interrupted, it picks up where it left off.
-
-<details>
-<summary><strong>Why <code>context_precision</code> uses a non-LLM variant</strong></summary>
-
-Ragas's LLM-based `context_precision` evaluates each chunk independently against the full generated answer. For multi-hop questions (e.g., synthesizing two Constitution articles), this produces false negatives — neither article alone supports the combined answer, yielding a score of 0 despite perfect retrieval. `NonLLMContextPrecisionWithReference` is used instead, which compares against reference contexts directly. This is a [documented limitation](https://github.com/explodinggradients/ragas/issues/308) of the original metric.
-
-</details>
-
-<details>
-<summary><strong>A note on the <code>answer_relevancy</code> score</strong></summary>
-
-Answer relevancy scores can appear artificially low on compound, multi-part questions due to a known limitation in Ragas's `ResponseRelevancy` metric: it generates 3 hypothetical questions from the answer (by default) and averages their similarity to the original question, but does not guarantee these generated questions are actually diverse — it simply re-runs the same prompt multiple times and relies on sampling randomness for variation. This is a well-known, previously reported issue, documented in [GitHub Issue #1979](https://github.com/explodinggradients/ragas/issues/1979) ("ResponseRelevancy does not guarantee varied questions, making strictness effectively pointless") and [GitHub Issue #1192](https://github.com/explodinggradients/ragas/issues/1192) ("Answer Relevancy giving same questions everytime"), and is compounded by a separate reported bug where the evaluator LLM's temperature setting is sometimes ignored, further reducing output diversity ([GitHub Issue #1812](https://github.com/explodinggradients/ragas/issues/1812)). In this evaluation, this caused all 3 generated questions for all the test queries to be identical, capturing only one clause of the original multi-part question and understating the true relevancy score.
-
-</details>
-
----
-
 ## Acknowledgements
 
 - [LangChain](https://github.com/langchain-ai/langchain) & [LangGraph](https://github.com/langchain-ai/langgraph) for the agentic orchestration framework
 - [DeepSeek](https://deepseek.com/) for the R1 reasoning and V3 generation models
-- [Ragas](https://docs.ragas.io/) for the evaluation framework
+- [DeepEval](https://docs.confident-ai.com/) for the evaluation framework
+- [Ragas](https://docs.ragas.io/) for knowledge graph and test set generation
+- [MLflow](https://mlflow.org/) & [DagsHub](https://dagshub.com/) for experiment tracking
 - [Arize Phoenix](https://phoenix.arize.com/) for observability tooling
 
 ---

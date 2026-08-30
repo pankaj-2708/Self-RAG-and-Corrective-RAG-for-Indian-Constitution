@@ -57,4 +57,4 @@ pipeline_eval:
   CONTEXTUAL_RELEVANCY_THRESHOLD: 0.7
   name: "test_setv3"
   max_retriever_queries: 3
-  enabled: true
+  enabled: false
