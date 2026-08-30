@@ -1,7 +1,7 @@
 name: CI CD pipeline
 on:
     push:
-
+      branches: [ main ]
 jobs:
     run_and_log_evals:
       runs-on: ubuntu-latest

@@ -51,6 +51,9 @@ from deepeval.metrics import (
 )
 from deepeval.models import AmazonBedrockModel
 from src.workflow import get_workflow
+from dotenv import load_dotenv
+
+load_dotenv()
 
 mlflow.set_experiment("constitution-rag")
 

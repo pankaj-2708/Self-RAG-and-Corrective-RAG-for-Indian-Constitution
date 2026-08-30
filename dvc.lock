@@ -69,18 +69,18 @@ stages:
   pipeline_eval:
     cmd: python ./evals/PipelineLevel/eval.py
     deps:
-    - path: ./data/precision_failure_test_set.csv
+    - path: ./data/sub_set_test.csv
       hash: md5
-      md5: cf03d35abac077f2f9a4f5e0d726059c
-      size: 17966
+      md5: 4131a72b22b02d4078933b784cc850b2
+      size: 31714
     - path: ./evals/PipelineLevel/eval.py
       hash: md5
-      md5: a1de386486fba4e2cbe810e40fa35dd9
-      size: 10153
+      md5: d0e2e63ddf7a523003018a9268a000b2
+      size: 10597
     - path: ./src/workflow
       hash: md5
-      md5: 9baa31e3e34d61313abf7e38642baf0d.dir
-      size: 236582
+      md5: 04b2bce6651402b9bc58bc9da7c1b1fa.dir
+      size: 242072
       nfiles: 27
     params:
       params.yaml:
@@ -90,19 +90,20 @@ stages:
         pipeline_eval.PRECISION_THRESHOLD: 0.7
         pipeline_eval.RECALL_THRESHOLD: 0.7
         pipeline_eval.embeddings.model_name: amazon.titan-embed-text-v2:0
+        pipeline_eval.enabled: true
         pipeline_eval.k: 3
         pipeline_eval.llm_model_id: deepseek.v3.2
         pipeline_eval.llm_temperature: 0.0
         pipeline_eval.models.region: us-east-1
-        pipeline_eval.name: recall_failure_test_case
+        pipeline_eval.name: sub_set_test
         pipeline_eval.output: pipeline_eval.csv
         pipeline_eval.region: us-east-1
         pipeline_eval.search_type: similarity
-        pipeline_eval.test_set: recall_failure_test_case.csv
+        pipeline_eval.test_set: sub_set_test.csv
         pipeline_eval.vector_store_collection_name: constitution_and_ipc
         pipeline_eval.vector_store_name: constitution_and_ipc.chroma
     outs:
     - path: ./data/pipeline_eval.csv
       hash: md5
-      md5: 9228676ea9956c3b956379681dcb5768
-      size: 76948
+      md5: 516ced0ceae15c5fd3d87275866e0c7f
+      size: 69969

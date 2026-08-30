@@ -81,23 +81,34 @@ For each retrieved context chunk, check: does this chunk directly address a spec
 - Do not let the number of irrelevant chunks retrieved influence the length, framing, or confidence of your answer. Base the answer only on the surviving relevant chunks.
 - After filtering, if ZERO chunks are relevant, output: "The information requested is not available in the provided documents." and stop — do not fall back to loosely related chunks to avoid an empty answer.
 
+STEP 0.5 — MEMORIZED-KNOWLEDGE FIREWALL (critical, apply before drafting):
+You likely already "know" portions of the Indian Constitution and IPC from prior training. This is a liability here, not an asset.
+- Treat your own memorized knowledge of these statutes as UNAVAILABLE for this task. It exists only to help you read the retrieved chunks accurately — never to supplement, complete, or "correct" them.
+- If a retrieved chunk seems incomplete, oddly worded, or different from what you recall the "real" provision says, DO NOT patch it with your memorized version. Answer only from what the chunk actually contains, even if you believe it is incomplete.
+- If you notice yourself about to add a section number, punishment, exception, or clause that you cannot point to in a specific surviving chunk, stop — that is memorized knowledge leaking in, not retrieval. Remove it.
+- Never silently "fix" a chunk that looks like an OCR error, truncation, or outdated amendment using your own knowledge. If a chunk is genuinely unusable (e.g., clearly cut off mid-clause), treat it as not supporting that part of the answer rather than filling the gap yourself.
+
 ANSWER CONSTRUCTION RULES (apply only to the chunks that survived Step 0):
 
 1. **Strict Grounding**: Use ONLY the filtered, relevant contexts. Do NOT add any information from your own training data. If the answer is not present in the relevant contexts, explicitly state: "The information requested is not available in the provided documents."
 2. **Mirror the Question**: Answer using the same terms, entities, and structure the user used in their query, and address each part in the same order the user asked it. Do not reorganize, reframe, or lead with a different framing than the question itself.
-3. **Completeness Without Extras**: Within the relevant contexts only, provide a comprehensive and detailed response. Include all relevant statutory definitions, punishments, sub-clauses, explanations, and exceptions that are DIRECTLY tied to the user's query — not everything on the topic that happened to be retrieved.
-4. **Citation**: Cite the contexts in the answer, keep the citations well formatted and mention them separately at the end. Only cite chunks that actually contributed to the answer.
-5. **Plain Language, Not Legalese**: Write in plain, everyday language a non-lawyer would understand. Avoid formal legal phrasing, archaic terms, and dense statutory language from the source text — paraphrase legal concepts into simple, direct sentences. Avoid hedging language like "may," "it depends," or "in certain circumstances" unless the source contains a genuine conditional that changes the answer.
-6. **No Preamble**: Do not write "Based on the provided context," "According to the documents," or any similar framing at the start. Answer the query directly as the first sentence.
-7. **No Invented Facts**: Do not invent, assume, or infer facts not explicitly stated in the contexts.
-8. Organize your answer using clear subheadings, bullet points, and exact statutory citations where applicable.
-9. Never mention a rejected/irrelevant chunk in the output, even to explain why it was excluded — exclusion should be silent.
-10. Your main goal is to answer the user's query accurately using only the contexts that are actually relevant to it — a shorter, correctly-scoped answer is better than a longer one padded with tangential retrieved content.
+3. **Partial Groundedness Handling**: If the user's query has multiple parts and only some are supported by surviving chunks, answer the supported parts normally and explicitly flag the unsupported ones individually — e.g., "The documents do not specify [X]" — rather than dropping them silently or answering the whole query as unavailable. Do not let an ungrounded sub-part cause you to withhold a sub-part that IS grounded.
+4. **No Cross-Chunk Inference**: Do not combine facts from two different chunks to construct a claim that isn't explicitly stated in either one individually, even if the combination seems logically obvious. If a conclusion requires connecting two chunks, state each chunk's fact separately rather than merging them into a new synthesized claim.
+5. **Completeness Without Extras**: Within the relevant contexts only, provide a comprehensive and detailed response. Include all relevant statutory definitions, punishments, sub-clauses, explanations, and exceptions that are DIRECTLY tied to the user's query — not everything on the topic that happened to be retrieved.
+6. **Citation**: Cite the contexts in the answer, keep the citations well formatted and mention them separately at the end. Only cite chunks that actually contributed to the answer.
+7. **Plain Language, With Precision Carve-Out**: Write explanations in plain, everyday language a non-lawyer would understand — avoid formal legal phrasing and archaic terms. HOWEVER, reproduce exactly (never round, simplify, or reword) any: section/article numbers, sub-clause labels, punishment durations, fine amounts, dates, and ages stated in the context. Paraphrase the surrounding explanation, never the numbers themselves. Avoid hedging language like "may," "it depends," or "in certain circumstances" unless the source contains a genuine conditional that changes the answer.
+8. **No Preamble**: Do not write "Based on the provided context," "According to the documents," or any similar framing at the start. Answer the query directly as the first sentence.
+9. **No Invented Facts**: Do not invent, assume, or infer facts not explicitly stated in the contexts.
+10. Organize your answer using clear subheadings, bullet points, and exact statutory citations where applicable.
+11. Never mention a rejected/irrelevant chunk in the output, even to explain why it was excluded — exclusion should be silent.
+12. Your main goal is to answer the user's query accurately using only the contexts that are actually relevant to it — a shorter, correctly-scoped answer is better than a longer one padded with tangential retrieved content.
+
+STEP FINAL — SELF-VERIFICATION (do this silently before emitting output):
+Reread your drafted answer sentence by sentence. For each sentence containing a factual claim, number, or section reference, confirm you can point to the specific surviving chunk that states it. If you cannot, either delete the sentence or rewrite it to only state what the chunk actually supports. Only emit the answer after this pass.
 
 Output format - {parser_for_answer_from_context_node.get_format_instructions()}
 
 Always reply in English."""
-
 
 sys_prompt_for_check_answer_grounded_node = f"""You are a legal fact-checking auditor. Your task is to rigorously verify whether a generated answer is fully supported by the provided contexts.
 
