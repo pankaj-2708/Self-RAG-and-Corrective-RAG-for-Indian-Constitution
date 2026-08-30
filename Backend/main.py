@@ -45,14 +45,12 @@ async def get_all_chats():
             # by the same checkpoint_id descending. LangGraph's checkpoint_id
             # starts with a sortable timestamp prefix, so this gives us
             # most-recently-updated first.
-            async with ck_ptr.conn.execute(
-                """
+            async with ck_ptr.conn.execute("""
                 SELECT thread_id, MAX(checkpoint_id) AS latest_checkpoint
                 FROM checkpoints
                 GROUP BY thread_id
                 ORDER BY latest_checkpoint DESC
-                """
-            ) as cursor:
+                """) as cursor:
                 thread_ids = [row[0] async for row in cursor]
 
             for thread_id in thread_ids:
@@ -70,6 +68,7 @@ async def get_all_chats():
     except Exception as e:
         print(e)
         return {"status": "failed", "error": str(e)}
+
 
 # Load config parameters
 _CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
@@ -166,7 +165,7 @@ def _extract_node_details(node_name: str, data: dict) -> dict:
                 for line in c.split("\n"):
                     line = line.strip()
                     if line.lower().startswith("title -"):
-                        titles.append(line[len("title -"):].strip())
+                        titles.append(line[len("title -") :].strip())
                         break
             return {
                 "web_result_count": len(ctxs),
@@ -215,17 +214,35 @@ async def run_workflow(thread_id, user_query):
                 initial_state = {
                     "user_query": user_query,
                     "k": _pipeline_defaults.get("k", 2),
-                    "max_retry_for_groundness_checking": _pipeline_defaults.get("max_retry_for_groundness_checking", 1),
-                    "max_retry_for_answer_relevant_checking": _pipeline_defaults.get("max_retry_for_answer_relevant_checking", 1),
+                    "max_retriever_queries": _pipeline_defaults.get(
+                        "max_retriever_queries", 3
+                    ),
+                    "max_retry_for_groundness_checking": _pipeline_defaults.get(
+                        "max_retry_for_groundness_checking", 1
+                    ),
+                    "max_retry_for_answer_relevant_checking": _pipeline_defaults.get(
+                        "max_retry_for_answer_relevant_checking", 1
+                    ),
                 }
             else:
                 initial_state = {
                     "user_query": user_query,
                     "k": _pipeline_defaults.get("k", 2),
-                    "max_retry_for_groundness_checking": _pipeline_defaults.get("max_retry_for_groundness_checking", 1),
-                    "max_retry_for_answer_relevant_checking": _pipeline_defaults.get("max_retry_for_answer_relevant_checking", 1),
-                    "max_turns_before_summarisation": _pipeline_defaults.get("max_turns_before_summarisation", 2),
-                    "messages_to_include": _pipeline_defaults.get("messages_to_include", 0),
+                    "max_retriever_queries": _pipeline_defaults.get(
+                        "max_retriever_queries", 3
+                    ),
+                    "max_retry_for_groundness_checking": _pipeline_defaults.get(
+                        "max_retry_for_groundness_checking", 1
+                    ),
+                    "max_retry_for_answer_relevant_checking": _pipeline_defaults.get(
+                        "max_retry_for_answer_relevant_checking", 1
+                    ),
+                    "max_turns_before_summarisation": _pipeline_defaults.get(
+                        "max_turns_before_summarisation", 2
+                    ),
+                    "messages_to_include": _pipeline_defaults.get(
+                        "messages_to_include", 0
+                    ),
                     "input_tokens": 0,
                     "output_tokens": 0,
                 }
@@ -240,8 +257,8 @@ async def run_workflow(thread_id, user_query):
                 details = _extract_node_details(node_name, node_data)
                 yield f"event: node_complete\ndata: {json.dumps({ 'node': node_name, 'details': details })}\n\n"
             response = await workflow.aget_state(
-                    config={"configurable": {"thread_id": thread_id}}
-                )
+                config={"configurable": {"thread_id": thread_id}}
+            )
             ai_response = response.values["generated_response"]
             in_tokens = response.values.get("input_tokens", 0)
             out_tokens = response.values.get("output_tokens", 0)
@@ -272,4 +289,4 @@ async def rag_stream(thread_id: str, query: str):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app,host="0.0.0.0",port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

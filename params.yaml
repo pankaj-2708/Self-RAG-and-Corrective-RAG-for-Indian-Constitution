@@ -1,11 +1,60 @@
-knowledge_graph:
-  create_knowledge_graph: False
+standalone_retriever:
+  test_set: "sample_test_set.csv"
+  output: "standalone_retriever_eval.csv"
+  vector_store_name: "constitution_and_ipc.chroma"
+  vector_store_collection_name: "constitution_and_ipc"
+  search_type: "similarity"
+  k: 3
+  embeddings:
+    model_name: "amazon.titan-embed-text-v2:0"
+  models:
+    region: "us-east-1"
+  region: "us-east-1"
+  llm_model_id: "deepseek.v3.2"
+  llm_temperature: 0.0
+  RECALL_THRESHOLD: 0.7
+  PRECISION_THRESHOLD: 0.7
+  name: "only_retriever_for_10_rows"
+  enabled: false
 
-test_set_generation:
-  test_size: 50
-  generate_test_set: False
+standalone_generator:
+  test_set: "sample_test_set.csv"
+  output: "standalone_generator_eval.csv"
+  vector_store_name: "constitution_and_ipc.chroma"
+  vector_store_collection_name: "constitution_and_ipc"
+  search_type: "similarity"
+  k: 3
+  embeddings:
+    model_name: "amazon.titan-embed-text-v2:0"
+  models:
+    region: "us-east-1"
+  region: "us-east-1"
+  llm_model_id: "deepseek.v3.2"
+  llm_temperature: 0.0
+  FAITHFULNESS_THRESHOLD: 0.7
+  ANSWER_RELEVANCY_THRESHOLD: 0.7
+  name: "only_generator_for_10_rows"
+  enabled: false
 
-evaluate:
-  evaluate_rag: True
-  continue_previous_run: "yes"
-  mode: "dvc"
+pipeline_eval:
+  test_set: "test_set.csv"
+  output: "pipeline_eval.csv"
+  vector_store_name: "constitution_and_ipc.chroma"
+  vector_store_collection_name: "constitution_and_ipc"
+  search_type: "similarity"
+  k: 3
+  embeddings:
+    model_name: "amazon.titan-embed-text-v2:0"
+  models:
+    region: "us-east-1"
+  region: "us-east-1"
+  llm_model_id: "deepseek.v3.2"
+  llm_temperature: 0.0
+  RECALL_THRESHOLD: 0.7
+  PRECISION_THRESHOLD: 0.7
+  FAITHFULNESS_THRESHOLD: 0.7
+  ANSWER_RELEVANCY_THRESHOLD: 0.7
+  CONTEXTUAL_RELEVANCY_THRESHOLD: 0.7
+  name: "test_setv3
+  max_retriever_queries: 3
+  enabled: true

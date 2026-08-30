@@ -4,6 +4,7 @@ from pydantic import Field
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
+
 def deduplicate_reducer(existing: List[str], new: List[str]) -> List[str]:
     if existing is None:
         existing = []
@@ -11,10 +12,22 @@ def deduplicate_reducer(existing: List[str], new: List[str]) -> List[str]:
         new = []
 
     # to reset after turn
-    if len(new)!=0 and new[0] == "-1":
+    if len(new) != 0 and new[0] == "-1":
         return []
 
     return list(dict.fromkeys(existing + new))
+
+
+def scored_contexts_reducer(existing: List[dict], new: List[dict]) -> List[dict]:
+    """Accumulates {score, context} dicts from each is_relevant_node fan-out.
+    Resets on a sentinel dict where context == '-1'."""
+    if existing is None:
+        existing = []
+    if new is None:
+        new = []
+    if len(new) != 0 and new[0].get("context") == "-1":
+        return []
+    return existing + new
 
 
 class schema(TypedDict):
@@ -25,6 +38,7 @@ class schema(TypedDict):
     web_search_queries: Optional[List[str]]
     retrieved_contexts: Annotated[List[str], deduplicate_reducer]
     relevant_contexts: Annotated[List[str], deduplicate_reducer]
+    scored_relevant_contexts: Annotated[List[dict], scored_contexts_reducer]
     answer_for_query: str
     generated_response: str
     is_grounded: Literal["fully_supported", "not_fully_supported"]
@@ -33,6 +47,7 @@ class schema(TypedDict):
     relevance_explanation: str
     evidence: str
     k: Optional[int] = Field(default=3)
+    max_retriever_queries: Optional[int] = Field(default=3)
     max_retry_for_groundness_checking: Optional[int] = Field(default=3)
     max_retry_for_answer_relevant_checking: Optional[int] = Field(default=2)
     messages: List[BaseMessage]

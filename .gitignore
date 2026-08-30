@@ -12,7 +12,8 @@ data/knowledge_graph2.json
 data/constitution_and_ipc.faiss
 
 *.csv
-.dvc
+!.dvc
+!test_set.csv
 .env
 
 *.db
@@ -27,3 +28,8 @@ src/workflow_backup.py
 src/Backend/data/
 *.excalidraw
 frontend_backup_20260818
+.cache_ggshield
+.deepeval
+mlruns
+graphify-out
+.agents

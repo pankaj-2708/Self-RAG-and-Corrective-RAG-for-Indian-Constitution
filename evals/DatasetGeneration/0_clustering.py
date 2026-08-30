@@ -35,11 +35,13 @@ t_documents = data["documents"]
 t_metadata = data["metadatas"]
 t_embedding = data["embeddings"]
 
-df = pd.DataFrame({"document": t_documents, "metadata": t_metadata, "embedding": list(t_embedding)})
+df = pd.DataFrame(
+    {"document": t_documents, "metadata": t_metadata, "embedding": list(t_embedding)}
+)
 
 embeddings = []
 for i in range(df.shape[0]):
-    embeddings.append(df['embedding'].values[i])
+    embeddings.append(df["embedding"].values[i])
 embeddings = np.array(embeddings)
 
 inertias = []
@@ -61,10 +63,10 @@ for k in tqdm(range(c_cfg["k_min"], c_cfg["k_max"])):
 print(f"Best K: {best_k}, Best Silhouette Score: {best_si}")
 
 # Plot inertias
-plt.plot(range(c_cfg["k_min"], c_cfg["k_max"]), inertias, marker='o')
-plt.title('Inertia vs K')
-plt.xlabel('Number of clusters k')
-plt.ylabel('Inertia')
+plt.plot(range(c_cfg["k_min"], c_cfg["k_max"]), inertias, marker="o")
+plt.title("Inertia vs K")
+plt.xlabel("Number of clusters k")
+plt.ylabel("Inertia")
 plt.savefig(os.path.join(DATA_DIR, "optimal_k_inertia.png"))
 print("Saved optimal_k_inertia.png to data directory")
 
@@ -74,15 +76,22 @@ model = KMeans(n_clusters=k, random_state=c_cfg["random_state"])
 model.fit(embeddings)
 y_pred = model.predict(embeddings)
 
-df['cluster'] = y_pred
+df["cluster"] = y_pred
 
 for c in sorted(df["cluster"].unique()):
     print(f"--- Cluster {c} ---")
-    print(df[df.cluster == c]["document"].sample(min(3, len(df[df.cluster == c]))).tolist())
+    print(
+        df[df.cluster == c]["document"]
+        .sample(min(3, len(df[df.cluster == c])))
+        .tolist()
+    )
 
 sample_size = c_cfg["sample_size"]
 sampled_df, _ = train_test_split(
-    df, train_size=sample_size, stratify=df["cluster"], random_state=c_cfg["random_state"]
+    df,
+    train_size=sample_size,
+    stratify=df["cluster"],
+    random_state=c_cfg["random_state"],
 )
 
 df.to_csv(os.path.join(DATA_DIR, "df.csv"), index=False)
