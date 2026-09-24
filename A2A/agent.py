@@ -97,10 +97,10 @@ class WorkflowExecutor(AgentExecutor):
             task = new_task_from_user_message(context.message)
             await event_queue.enqueue_event(task)
 
-        try:
-            task_updater = TaskUpdater(
+        task_updater = TaskUpdater(
                 event_queue=event_queue, task_id=task.id, context_id=task.context_id
             )
+        try:
 
             await task_updater.update_status(
                 state=TaskState.TASK_STATE_WORKING,
@@ -169,10 +169,24 @@ class WorkflowExecutor(AgentExecutor):
             )
 
     async def cancel(self,context: RequestContext, event_queue: EventQueue):
-        pass
+        task = context.current_task
+        if task is None:
+            return
+
+        running = self._running_tasks.get(task.id)
+        if running is not None and not running.done():
+            running.cancel()
+        else:
+            task_updater = TaskUpdater(
+                event_queue=event_queue, task_id=task.id, context_id=task.context_id
+            )
+            await task_updater.update_status(
+                state=TaskState.TASK_STATE_CANCELED,
+                message=new_text_message('Task was not running or already finished.'),
+            )
 
 request_handler = DefaultRequestHandler(
-    executor=WorkflowExecutor(),
+    agent_executor=WorkflowExecutor(),
     task_store=InMemoryTaskStore(),
     agent_card=public_agent_card
 )

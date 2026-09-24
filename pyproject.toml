@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "a2a-sdk>=1.1.5",
     "arize-phoenix>=17.19.0",
     "faiss-cpu>=1.13.2",
     "html5lib>=1.1",
@@ -32,6 +33,5 @@ dependencies = [
     "rich>=14.3.4",
     "scikit-learn>=1.8.0",
     "selenium>=4.43.0",
-    "sentence-transformers>=5.4.1",
     "tqdm>=4.67.3",
 ]

@@ -96,3 +96,28 @@ def _extract_node_details(node_name: str, data: dict) -> dict:
 
         case _:
             return {}
+
+def _preview_text(value, limit=120):
+    if not isinstance(value, str):
+        return value
+    return value[:limit] + ("…" if len(value) > limit else "")
+
+
+def _context_title(value):
+    """Pull a short heading out of a retrieved passage.
+
+    The corpus tends to lead with a line like ``Title - Article 14`` or
+    ``title - Article 14``. If we don't find one we fall back to the first
+    non-empty line so the ledger can still label the passage.
+    """
+    if not isinstance(value, str):
+        return ""
+    for line in value.split("\n"):
+        cleaned = line.strip()
+        if not cleaned:
+            continue
+        lowered = cleaned.lower()
+        if lowered.startswith("title -") or lowered.startswith("article -"):
+            return cleaned.split(" - ", 1)[-1].strip() or cleaned
+        return cleaned[:80]
+    return ""
