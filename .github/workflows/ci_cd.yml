@@ -29,6 +29,7 @@ jobs:
             MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
             MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
             TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+            TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
           run: |
             dvc repro
 
@@ -92,6 +93,7 @@ jobs:
                 LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
                 AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
                 TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+                TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
                 LANGSMITH_ENDPOINT: ${{ secrets.LANGSMITH_ENDPOINT }}
                 LANGSMITH_PROJECT: ${{ secrets.LANGSMITH_PROJECT }}
                 LANGSMITH_TRACING_V2: ${{ secrets.LANGSMITH_TRACING_V2 }}

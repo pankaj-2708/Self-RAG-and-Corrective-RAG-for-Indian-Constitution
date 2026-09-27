@@ -2,6 +2,7 @@
   <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white" />
   <img src="https://img.shields.io/badge/LangGraph-Agentic_Workflow-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white" />
   <img src="https://img.shields.io/badge/DeepSeek_R1_&_V3-AWS_Bedrock-FF9900?style=for-the-badge&logo=amazonwebservices&logoColor=white" />
+  <img src="https://img.shields.io/badge/Jev-TypeSafe_System--1_Model-7c3aed?style=for-the-badge" />
   <img src="https://img.shields.io/badge/ChromaDB-Vector_Store-00AA6C?style=for-the-badge" />
   <img src="https://img.shields.io/badge/DeepEval-Evaluation-EF4444?style=for-the-badge" />
   <img src="https://img.shields.io/badge/MLflow-Experiment_Tracking-0194E2?style=for-the-badge&logo=mlflow&logoColor=white" />
@@ -13,7 +14,7 @@
 <h1 align="center">Self-RAG & Corrective RAG for the Indian Constitution & IPC</h1>
 
 <p align="center">
-  <em>An agentic, self-correcting Retrieval-Augmented Generation system that delivers reliable, grounded answers on Indian law — powered by LangGraph, DeepSeek R1/V3, and multi-stage validation.</em>
+  <em>An agentic, self-correcting Retrieval-Augmented Generation system that delivers reliable, grounded answers on Indian law — powered by LangGraph, DeepSeek R1/V3, and <strong>Jev (TypeSafe)</strong> for ultra-fast System-1 decision-making.</em>
 </p>
 
 ---
@@ -65,11 +66,11 @@ A three-tier evaluation framework built with [DeepEval](https://docs.confident-a
 
 ### Token Usage (For 50 questions present in test_set.csv)
 
-| Metric | Value |
-|---|---|
-| **Total tokens** | ~666K |
-| **Input tokens** | ~520K |
-| **Output tokens** | ~147K |
+| Metric                   | Value        |
+| --------------------------| --------------|
+| **Total tokens**         | ~666K        |
+| **Input tokens**         | ~520K        |
+| **Output tokens**        | ~147K        |
 | **Avg tokens per query** | ~10.2K input |
 
 ### Evaluation Tiers
@@ -158,17 +159,17 @@ config:
 ---
 graph TD
     __start__([" __start__ "]):::startNode
-    retrieval_decider_node["Retrieval Decider"]:::routingNode
+    retrieval_decider_node["Retrieval Decider (Jev)"]:::jevNode
     generate_retriever_query_node["Generate Retriever Queries"]:::retrievalNode
     retrieve_node["Retrieve - Parallel"]:::retrievalNode
     aggregate_retrieval["Aggregate Retrieval"]:::retrievalNode
     direct_generation_node["Direct Generation"]:::generationNode
-    is_relevant_node["Relevance Check - Parallel"]:::validationNode
+    is_relevant_node["Relevance Check - Parallel (Jev)"]:::jevNode
     aggregate_relevance["Aggregate Relevance"]:::validationNode
     answer_from_context_node["Generate Answer from Context"]:::generationNode
-    check_answer_grounded_node["Grounding Check"]:::validationNode
+    check_answer_grounded_node["Grounding Check (Jev/LLM)"]:::jevHybridNode
     revise_answer_node["Revise Answer"]:::correctionNode
-    is_answer_relevant_node["Answer Relevance Check"]:::validationNode
+    is_answer_relevant_node["Answer Relevance Check (Jev/LLM)"]:::jevHybridNode
     rewrite_answer_node["Rewrite Answer"]:::correctionNode
     generate_web_search_query_node["Generate Web Query"]:::webNode
     web_search_node["Web Search"]:::webNode
@@ -209,49 +210,51 @@ graph TD
     memory_node -. " end " .-> __end__
     modify_short_term_memory_node --> __end__
 
-    classDef startNode fill:#1a1a2e,stroke:#00d4aa,stroke-width:2px,color:#00d4aa
-    classDef endNode fill:#1a1a2e,stroke:#00d4aa,stroke-width:2px,color:#00d4aa
-    classDef routingNode fill:#2d1b69,stroke:#a78bfa,stroke-width:2px,color:#e0d4ff
-    classDef retrievalNode fill:#1e3a5f,stroke:#60a5fa,stroke-width:2px,color:#dbeafe
+    classDef startNode      fill:#1a1a2e,stroke:#00d4aa,stroke-width:2px,color:#00d4aa
+    classDef endNode        fill:#1a1a2e,stroke:#00d4aa,stroke-width:2px,color:#00d4aa
+    classDef jevNode        fill:#4c1d95,stroke:#a78bfa,stroke-width:2px,color:#ede9fe
+    classDef jevHybridNode  fill:#4c1d95,stroke:#a78bfa,stroke-width:2px,color:#ede9fe,stroke-dasharray:6
+    classDef retrievalNode  fill:#1e3a5f,stroke:#60a5fa,stroke-width:2px,color:#dbeafe
     classDef generationNode fill:#1a4731,stroke:#34d399,stroke-width:2px,color:#d1fae5
     classDef validationNode fill:#713f12,stroke:#fbbf24,stroke-width:2px,color:#fef3c7
     classDef correctionNode fill:#7f1d1d,stroke:#f87171,stroke-width:2px,color:#fee2e2
-    classDef webNode fill:#164e63,stroke:#22d3ee,stroke-width:2px,color:#cffafe
-    classDef memoryNode fill:#3b1f5e,stroke:#c084fc,stroke-width:2px,color:#ede9fe
+    classDef webNode        fill:#164e63,stroke:#22d3ee,stroke-width:2px,color:#cffafe
+    classDef memoryNode     fill:#3b1f5e,stroke:#c084fc,stroke-width:2px,color:#ede9fe
 ```
 
 
 **Legend**
 
-| Colour | Stage |
-|---|---|
-| Purple | Query Routing |
-| Blue | Vector Retrieval |
-| Green | Answer Generation |
-| Yellow | Validation & Checks |
-| Red | Self-Correction |
-| Cyan | Web Search Fallback |
-| Violet | Conversational Memory |
+| Label | Colour | Stage |
+|---|---|---|
+| (Jev) | Purple | Jev System-1 — full replacement (no LLM) |
+| (Jev/LLM) | Purple dashed | Jev System-1 decision + LLM only on failure path |
+| — | Blue | Vector Retrieval |
+| — | Green | Answer Generation |
+| — | Yellow | Validation & Checks |
+| — | Red | Self-Correction |
+| — | Cyan | Web Search Fallback |
+| — | Violet | Conversational Memory |
 
 ---
 
 ## How It Works
 
-1. **Query Routing** — DeepSeek R1 classifies the user's question as requiring `retrieval` (vector DB), `web_search`, or `direct_generation` (greetings/chitchat).
+1. **Query Routing** — **Jev (TypeSafe)** classifies the user's question as requiring `retrieval` (vector DB), `web_search`, or `direct_generation` (greetings/chitchat) in milliseconds.
 
 2. **Multi-Query Generation** — For retrieval queries, DeepSeek V3 generates up to 3 optimized sub-queries with optional metadata filters (`doc_type`, Article/Section numbers).
 
 3. **Parallel Retrieval** — Each sub-query triggers a parallel vector search via LangGraph's `Send` API (fan-out pattern) against the ChromaDB store.
 
-4. **Parallel Relevance Scoring** — Every retrieved chunk is independently scored for relevance using DeepSeek V3 (Map step), then results are aggregated (Reduce step). Irrelevant chunks are discarded.
+4. **Parallel Relevance Scoring** — Every retrieved chunk is independently scored for relevance using **Jev** (Map step), then results are aggregated (Reduce step). Irrelevant chunks are discarded.
 
 5. **Web Search Fallback** — If no relevant context survives filtering, DeepSeek V3 generates web search queries and fetches results from Tavily asynchronously.
 
 6. **Answer Generation** — DeepSeek R1 synthesizes an answer from the validated context, leveraging chain-of-thought reasoning with conversation summary and history.
 
-7. **Grounding Verification** — DeepSeek V3 audits each claim in the answer against the source evidence. Ungrounded answers are revised by a DeepSeek R1 critic model. This loops until the answer is fully grounded or retries are exhausted.
+7. **Grounding Verification** — **Jev** performs a fast binary check on whether each claim in the answer is grounded. If not fully grounded, DeepSeek V3 generates specific evidence, and a DeepSeek R1 critic model revises the answer.
 
-8. **Relevance Validation** — DeepSeek R1 as a judge assesses whether the answer actually addresses the user's question. Irrelevant answers are rewritten with explicit reference to the relevance gap.
+8. **Relevance Validation** — **Jev** rapidly assesses whether the answer actually addresses the user's question. If irrelevant, DeepSeek R1 explains why and rewrites it.
 
 9. **Memory Management** — The validated answer is appended to conversation history. Every N turns, DeepSeek V3 generates a rolling summary of the conversation, enabling long multi-turn sessions without context overflow.
 
@@ -261,12 +264,12 @@ graph TD
 
 | Feature | Description |
 |---|---|
-| **Intelligent Query Routing** | DeepSeek R1 chain-of-thought reasoning classifies queries into `retrieval`, `web_search`, or `direct_generation` paths |
+| **Intelligent Query Routing** | **Jev** classifies queries into `retrieval`, `web_search`, or `direct_generation` paths instantly |
 | **Parallel Multi-Query Retrieval** | Generates optimized sub-queries and fans out parallel vector searches via LangGraph's `Send` API |
-| **Parallel Relevance Filtering** | Map-Reduce pattern scores each retrieved chunk independently, then aggregates to filter noise |
+| **Parallel Relevance Filtering** | Map-Reduce pattern scores each retrieved chunk independently with **Jev**, then aggregates to filter noise |
 | **Web Search Fallback** | Tavily Search API provides real-time web context when local retrieval finds no relevant results |
-| **Hallucination Guard** | Grounding checker verifies every answer against source evidence; ungrounded answers are revised by a critic model |
-| **Answer Relevance Loop** | A judge model evaluates if the final answer actually addresses the user's query; irrelevant answers are rewritten |
+| **Hallucination Guard** | **Jev + LLM Hybrid**: Fast binary grounding check verifies the answer; ungrounded answers are analyzed and revised by a critic model |
+| **Answer Relevance Loop** | **Jev + LLM Hybrid**: Fast evaluation of answer relevance; irrelevant answers are explained and rewritten |
 | **Conversational Memory** | SQLite-backed state checkpointing with rolling summarization preserves multi-turn context across sessions |
 | **Observability** | Arize Phoenix integration provides full tracing of every LLM call, retrieval, and decision |
 | **Three-Tier Evaluation** | Component-level (retriever, generator) and pipeline-level evaluation using DeepEval with automated test set generation |
@@ -303,7 +306,8 @@ graph TD
 | Layer | Technology |
 |---|---|
 | **Orchestration** | [LangGraph](https://github.com/langchain-ai/langgraph) — agentic state machine with parallel fan-out (16 nodes) |
-| **LLMs** | [DeepSeek R1](https://deepseek.com/) (reasoning/routing/judging) & [DeepSeek V3](https://deepseek.com/) (generation/grounding) via AWS Bedrock |
+| **System-1 Decision Engine** | [Jev by TypeSafe](https://typesafe.ai) — ultra-fast routing, relevance, and grounding checks |
+| **LLMs** | [DeepSeek R1](https://deepseek.com/) (reasoning/judging) & [DeepSeek V3](https://deepseek.com/) (generation) via AWS Bedrock |
 | **Embeddings** | [Amazon Titan Embed Text v2](https://docs.aws.amazon.com/bedrock/latest/userguide/titan-embedding-models.html) (vector store) · [all-mpnet-base-v2](https://huggingface.co/sentence-transformers/all-mpnet-base-v2) (evaluation clustering) |
 | **Vector Store** | [ChromaDB](https://www.trychroma.com/) — persistent local vector database |
 | **Web Search** | [Tavily Search API](https://tavily.com/) — real-time web search fallback |
@@ -410,7 +414,7 @@ constitution_rag_eval/
 
 - **Python 3.12+**
 - [uv](https://github.com/astral-sh/uv) (recommended) or pip
-- API keys for: **AWS Bedrock** (DeepSeek models + Titan Embeddings), **Tavily Search**, **LangSmith** (optional)
+- API keys for: **AWS Bedrock** (DeepSeek models + Titan Embeddings), **Tavily Search**, **TypeSafe** (Jev model), **LangSmith** (optional)
 
 ### 1. Clone the Repository
 
@@ -443,6 +447,9 @@ AWS_BEARER_TOKEN_BEDROCK="your-aws-bearer-token"
 
 # Web Search (required for fallback)
 TAVILY_API_KEY="your-tavily-api-key"
+
+# TypeSafe Jev (required for System-1 decisions)
+TYPESAFE_API_KEY="your-typesafe-api-key"
 
 # Observability (optional)
 LANGSMITH_TRACING_V2="true"

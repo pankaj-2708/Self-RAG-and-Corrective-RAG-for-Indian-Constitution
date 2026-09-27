@@ -1,8 +1,6 @@
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from workflow.state import schema
 from workflow.config import (
-    decision_model,
-    retrieval_decider_model,
     query_gen_model,
     generation_model,
     context_answer_model,
@@ -14,13 +12,13 @@ from workflow.config import (
     tavily_tool,
     vector_store,
     max_retriever_queries,
+    jev_relevance_threshold,
+    jev_grounding_threshold,
+    jev_answer_relevant_threshold,
 )
 from workflow.schemas import (
-    parser_for_retrieval_decider_node,
-    parser_for_is_relevant_node,
     parser_for_answer_from_context_node,
     parser_for_schema_for_check_answer_grounded_node,
-    parser_for_revise_answer_node,
     parser_for_revise_answer_node,
     parser_for_is_answer_relevant_node,
     parser_for_rewrite_answer_node,
@@ -28,8 +26,6 @@ from workflow.schemas import (
     parser_for_web_search_query_node,
 )
 from workflow.prompts import (
-    sys_prompt_for_retrieval_decider_node,
-    sys_prompt_for_is_relevant_node,
     sys_prompt_for_answer_from_context_node,
     sys_prompt_for_check_answer_grounded_node,
     sys_prompt_for_revise_answer_node,
@@ -39,6 +35,12 @@ from workflow.prompts import (
     sys_prompt_for_web_search_query_node,
     sys_prompt_for_modify_short_term_memory_node,
     sys_prompt_for_direct_generation_node,
+)
+from workflow.jev_client import (
+    jev_route_query,
+    jev_check_relevance,
+    jev_check_grounding,
+    jev_check_answer_relevance,
 )
 from langgraph.types import Send
 
@@ -60,20 +62,11 @@ def _extract_r1_text(content) -> str:
 
 
 async def retrieval_decider_node(state: schema):
-    inp = [
-        SystemMessage(content=sys_prompt_for_retrieval_decider_node),
-        HumanMessage(content=f"User Query - {state['user_query']}"),
-    ]
-    response = await retrieval_decider_model.ainvoke(inp)
-    usage = response.usage_metadata or {}
-    # R1 via Bedrock returns content as a list of dicts — extract only the 'text' block
-    content = _extract_r1_text(response.content)
-    res = (await parser_for_retrieval_decider_node.ainvoke(content)).retrieval_required
+    """Route the user query via Jev (System-1 model) — no full LLM call needed."""
+    route = await jev_route_query(state["user_query"])
     return {
-        "retrieval_required": res,
-        "input_tokens": usage.get("input_tokens", 0),
-        "output_tokens": usage.get("output_tokens", 0),
-        # reset all context accumulators at the start of each turn
+        "retrieval_required": route,
+        # Reset all context accumulators at the start of each turn
         "retrieved_contexts": ["-1"],
         "relevant_contexts": ["-1"],
         "scored_relevant_contexts": [{"context": "-1", "score": -1}],
@@ -216,23 +209,17 @@ def fanout_relevant_node(state: schema):
 
 
 async def is_relevant_node(inp):
-    sys_prompt = SystemMessage(content=sys_prompt_for_is_relevant_node)
-    hmn_prompt = f"Query - {inp['user_query']}" + f"\n Context - \n {inp['context']}"
-
-    response = await decision_model.ainvoke(
-        [sys_prompt, HumanMessage(content=hmn_prompt)]
+    """Check chunk relevance via Jev (System-1 model) — no full LLM call needed."""
+    is_relevant, score = await jev_check_relevance(
+        inp["user_query"],
+        inp["context"],
+        threshold=jev_relevance_threshold,
     )
-    usage = response.usage_metadata or {}
-    res = await parser_for_is_relevant_node.ainvoke(response.content)
-
-    out = {
-        "input_tokens": usage.get("input_tokens", 0),
-        "output_tokens": usage.get("output_tokens", 0),
-    }
-    if res.is_relevant_context:
+    out = {}
+    if is_relevant:
         # Write to scored buffer; aggregate_relevance will sort and write to relevant_contexts
         out["scored_relevant_contexts"] = [
-            {"score": res.relevance_score, "context": inp["context"]}
+            {"score": score, "context": inp["context"]}
         ]
     return out
 
@@ -294,22 +281,42 @@ async def answer_from_context_node(state: schema):
 
 
 async def check_answer_grounded_node(state: schema):
-
+    """
+    Option A hybrid: Jev makes the fast binary grounding decision.
+    The LLM (grounding_model) is called ONLY on the failure path — to produce the
+    actionable evidence text that revise_answer_node needs.
+    """
     if state["max_retry_for_groundness_checking"] <= 0:
         return {
-            # because max_retry_for_groundness_checking =0 so even if answer is not grounded we are not going to modify it so there is no sense of checking here
+            # max_retry_for_groundness_checking = 0: even if not grounded, we won't revise,
+            # so skip the check entirely.
             "is_grounded": "fully_supported",
             "evidence": "max_retries_exhausted",
             "input_tokens": 0,
             "output_tokens": 0,
         }
-    contexts = state["relevant_contexts"]
-    sys_prompt = SystemMessage(content=sys_prompt_for_check_answer_grounded_node)
-    context = ""
-    for i in contexts:
-        context += i
-        context += "\n"
 
+    context = "\n".join(state["relevant_contexts"])
+
+    # Step 1 — Jev binary decision (~100–300 ms, no LLM cost)
+    is_grounded = await jev_check_grounding(
+        state["generated_response"],
+        context,
+        threshold=jev_grounding_threshold,
+    )
+
+    if is_grounded:
+        # Happy path — LLM skipped entirely
+        return {
+            "is_grounded": "fully_supported",
+            "evidence": "",
+            "input_tokens": 0,
+            "output_tokens": 0,
+        }
+
+    # Failure path — call LLM only to produce the actionable evidence text
+    # (binary verdict is already known: not_fully_supported)
+    sys_prompt = SystemMessage(content=sys_prompt_for_check_answer_grounded_node)
     human_pr = HumanMessage(
         content=f"Answer - {state['generated_response']} \n Contexts - {context}"
     )
@@ -321,7 +328,7 @@ async def check_answer_grounded_node(state: schema):
     )
 
     return {
-        "is_grounded": res.is_grounded,
+        "is_grounded": "not_fully_supported",
         "evidence": res.evidence,
         "input_tokens": usage.get("input_tokens", 0),
         "output_tokens": usage.get("output_tokens", 0),
@@ -367,17 +374,42 @@ async def revise_answer_node(state: schema):
 
 
 async def is_answer_relevant_node(state: schema):
+    """
+    Option A hybrid: Jev makes the fast binary answer-relevance decision.
+    The LLM (judge_model) is called ONLY on the failure path — to produce the
+    actionable explanation text that rewrite_answer_node needs.
+    """
     if state["max_retry_for_answer_relevant_checking"] <= 0:
         return {
-            # because max_retry_for_answer_relevant_checking =0 so even if answer is not relevant we are not going to modify it so there is no sense of checking here
+            # max_retry_for_answer_relevant_checking = 0: even if not relevant, we won't
+            # rewrite, so skip the check entirely.
             "is_answer_relevant": True,
             "relevance_explanation": "max_retries_exhausted",
             "input_tokens": 0,
             "output_tokens": 0,
         }
+
     user_query = state["user_query"]
     generated_response = state["generated_response"]
 
+    # Step 1 — Jev binary decision (~100–300 ms, no LLM cost)
+    is_relevant = await jev_check_answer_relevance(
+        user_query,
+        generated_response,
+        threshold=jev_answer_relevant_threshold,
+    )
+
+    if is_relevant:
+        # Happy path — LLM skipped entirely
+        return {
+            "is_answer_relevant": True,
+            "relevance_explanation": "",
+            "input_tokens": 0,
+            "output_tokens": 0,
+        }
+
+    # Failure path — call LLM only to produce the actionable explanation text
+    # (binary verdict is already known: not relevant)
     sys_prompt = SystemMessage(content=sys_prompt_for_is_answer_relevant_node)
     human_pr = HumanMessage(
         content=f"Query - {user_query} \n\n Generated Response - {generated_response}"
@@ -389,7 +421,7 @@ async def is_answer_relevant_node(state: schema):
     content = _extract_r1_text(response.content)
     res = await parser_for_is_answer_relevant_node.ainvoke(content)
     return {
-        "is_answer_relevant": res.is_relevant,
+        "is_answer_relevant": False,
         "relevance_explanation": res.explanation,
         "input_tokens": usage.get("input_tokens", 0),
         "output_tokens": usage.get("output_tokens", 0),

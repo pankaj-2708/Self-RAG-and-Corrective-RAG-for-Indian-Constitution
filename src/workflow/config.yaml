@@ -46,3 +46,10 @@ pipeline_defaults:
 
 observability:
   phoenix_project_name: "constitution"
+
+jev:
+  # Noul probability threshold (0.0–1.0) above which the decision is considered "yes/true".
+  # Increase to be more conservative (fewer false positives); decrease to be more inclusive.
+  relevance_noul_threshold: 0.6        # is_relevant_node: chunk relevance gate
+  grounding_noul_threshold: 0.6        # check_answer_grounded_node: grounding gate
+  answer_relevant_noul_threshold: 0.6  # is_answer_relevant_node: answer quality gate

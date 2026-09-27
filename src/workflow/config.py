@@ -44,16 +44,6 @@ _r1_kwargs = dict(
 
 # ── Task-specific models ───────────────────────────────────────────────────────
 
-# Routing: retrieval / web_search / None  — R1 chain-of-thought for tiebreaker rules
-retrieval_decider_model = ChatBedrockConverse(
-    **_r1_kwargs, temperature=_models["r1_temperature"]
-)
-
-# Binary relevance check per chunk — V3 sufficient and cheaper for simple entailment
-decision_model = ChatBedrockConverse(
-    **_bedrock_kwargs, temperature=_models["decision_temperature"]
-)
-
 # Sub-query & web-query generation — moderate temp for variety
 query_gen_model = ChatBedrockConverse(
     **_bedrock_kwargs, temperature=_models["query_gen_temperature"]
@@ -70,6 +60,7 @@ context_answer_model = ChatBedrockConverse(
 )
 
 # Groundedness verification — zero temp for strict factual evaluation
+# NOTE: only called on the failure path (when Jev decides the answer is NOT grounded)
 grounding_model = ChatBedrockConverse(
     **_bedrock_kwargs, temperature=_models["grounding_temperature"]
 )
@@ -80,10 +71,17 @@ answer_rewrite_model = ChatBedrockConverse(
 )
 
 # Relevance judge — R1 to catch subtle relevance issues
+# NOTE: only called on the failure path (when Jev decides the answer is NOT relevant)
 judge_model = ChatBedrockConverse(**_r1_kwargs, temperature=_models["r1_temperature"])
 
 # Grounding critic — R1 for accurate revisions of ungrounded answers
 critic_model = ChatBedrockConverse(**_r1_kwargs, temperature=_models["r1_temperature"])
+
+# ── Jev thresholds ─────────────────────────────────────────────────────────────
+_jev_cfg = _cfg.get("jev", {})
+jev_relevance_threshold = _jev_cfg.get("relevance_noul_threshold", 0.6)
+jev_grounding_threshold = _jev_cfg.get("grounding_noul_threshold", 0.6)
+jev_answer_relevant_threshold = _jev_cfg.get("answer_relevant_noul_threshold", 0.6)
 
 # ── Vector store ───────────────────────────────────────────────────────────────
 _vs_path = os.path.abspath(
