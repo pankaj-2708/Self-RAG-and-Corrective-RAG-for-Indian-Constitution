@@ -1,5 +1,6 @@
 fastapi
 uvicorn
+boto3
 pyyaml
 python-dotenv
 pydantic
