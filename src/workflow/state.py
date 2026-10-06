@@ -57,3 +57,8 @@ class schema(TypedDict):
     messages_to_include: Optional[int]
     input_tokens: Annotated[int, operator.add]
     output_tokens: Annotated[int, operator.add]
+    message: Optional[str]
+    input_guardrail_intervened: bool
+    output_guardrail_intervened: bool
+    input_guardrail_blocked: bool
+    output_guardrail_blocked: bool

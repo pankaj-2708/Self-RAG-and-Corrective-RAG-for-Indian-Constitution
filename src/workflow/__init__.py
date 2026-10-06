@@ -42,6 +42,8 @@ from workflow.nodes import (
     aggregate_retrieval,
     memory_node,
     modify_short_term_memory_node,
+    input_guardrail_node,
+    output_guardrail_node,
 )
 from workflow.edges import (
     retrieval_decider_condition,
@@ -49,6 +51,8 @@ from workflow.edges import (
     is_grounded_condition,
     is_answer_relevant_condition,
     memory_summary_condition,
+    input_guardrail_condition,
+    output_guardrail_condition,
 )
 
 if not os.getenv("LANGSMITH_API_KEY") or os.getenv("LANGSMITH_TRACING_V2") == "false":
@@ -61,6 +65,8 @@ if not os.getenv("LANGSMITH_API_KEY") or os.getenv("LANGSMITH_TRACING_V2") == "f
 
 graph = StateGraph(state_schema=schema)
 
+graph.add_node("input_guardrail_node", input_guardrail_node)
+graph.add_node("output_guardrail_node", output_guardrail_node)
 graph.add_node("retrieval_decider_node", retrieval_decider_node)
 graph.add_node("generate_retriever_query_node", generate_retriever_query_node)
 graph.add_node("retrieve_node", retrieve_node)
@@ -78,7 +84,12 @@ graph.add_node("aggregate_relevance", aggregate_relevance)
 graph.add_node("memory_node", memory_node)
 graph.add_node("modify_short_term_memory_node", modify_short_term_memory_node)
 
-graph.add_edge(START, "retrieval_decider_node")
+graph.add_edge(START, "input_guardrail_node")
+graph.add_conditional_edges(
+    "input_guardrail_node",
+    input_guardrail_condition,
+    {"allowed": "retrieval_decider_node", "blocked": END},
+)
 graph.add_conditional_edges(
     "retrieval_decider_node",
     retrieval_decider_condition,
@@ -94,7 +105,7 @@ graph.add_conditional_edges(
     path_map=["retrieve_node"],
 )
 graph.add_edge("generate_web_search_query_node", "web_search_node")
-graph.add_edge("direct_generation_node", "memory_node")
+graph.add_edge("direct_generation_node", "output_guardrail_node")
 graph.add_edge("retrieve_node", "aggregate_retrieval")
 graph.add_conditional_edges(
     "aggregate_retrieval",
@@ -118,7 +129,7 @@ graph.add_edge("revise_answer_node", "check_answer_grounded_node")
 graph.add_conditional_edges(
     "is_answer_relevant_node",
     is_answer_relevant_condition,
-    {True: "memory_node", False: "rewrite_answer_node"},
+    {True: "output_guardrail_node", False: "rewrite_answer_node"},
 )
 graph.add_edge("rewrite_answer_node", "is_answer_relevant_node")
 graph.add_conditional_edges(
@@ -127,6 +138,11 @@ graph.add_conditional_edges(
     {"summarize": "modify_short_term_memory_node", "end": END},
 )
 graph.add_edge("modify_short_term_memory_node", END)
+graph.add_conditional_edges(
+    "output_guardrail_node",
+    output_guardrail_condition,
+    {"allowed": "memory_node", "blocked": END},
+)
 
 
 @asynccontextmanager

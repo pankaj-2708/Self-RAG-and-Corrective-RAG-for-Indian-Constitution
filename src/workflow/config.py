@@ -4,6 +4,7 @@ from langchain_tavily import TavilySearch
 from dotenv import load_dotenv
 import os
 import yaml
+import boto3
 
 load_dotenv()
 
@@ -17,6 +18,12 @@ _emb = _cfg["embeddings"]
 _vs = _cfg["vector_store"]
 _ret = _cfg["retriever"]
 _ws = _cfg["web_search"]
+_guardrails = _cfg["guardrails"]
+
+guardrail_identifier = _guardrails["identifier"]
+guardrail_version = str(_guardrails["version"])
+guardrail_region = _guardrails["region"]
+guardrail_client = boto3.client("bedrock-runtime", region_name=guardrail_region)
 
 # ── AWS auth ───────────────────────────────────────────────────────────────────
 if not os.environ.get("AWS_BEARER_TOKEN_BEDROCK"):

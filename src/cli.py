@@ -5,15 +5,8 @@ import warnings
 import logging
 import time
 
-os.environ["TRANSFORMERS_VERBOSITY"] = "error"
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
-warnings.filterwarnings("ignore")
-logging.getLogger("transformers").setLevel(logging.ERROR)
-logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
-logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
-
 import asyncio
-from workflow import get_workflow
+from .workflow import get_workflow
 import argparse
 import uuid
 from rich.console import Console
