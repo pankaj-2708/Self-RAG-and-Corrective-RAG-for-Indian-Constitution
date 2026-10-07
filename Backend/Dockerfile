@@ -15,7 +15,7 @@ COPY ./src/workflow ./src/workflow
 
 EXPOSE 8000
 
-CMD ["python", "Backend/main.py"]
+CMD ["python", "-m","Backend.main"]
 
 # Docker build command -> docker build -f ./Backend/Dockerfile -t pankajmaulekhi/backend . (from root)
 # docker run -e LANGSMITH_API_KEY="<your-key>" -e AWS_BEARER_TOKEN_BEDROCK="<your-key>" -e LANGSMITH_ENDPOINT="https://api.smith.langchain.com" -e TAVILY_API_KEY="<your-key>" -e LANGSMITH_PROJECT="constitution-deployed" -e LANGSMITH_TRACING_V2="true" -p 8000:8000 backend

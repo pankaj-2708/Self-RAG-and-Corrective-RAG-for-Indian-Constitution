@@ -1,4 +1,6 @@
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+import asyncio
+
 from workflow.state import schema
 from workflow.config import (
     decision_model,
@@ -14,6 +16,9 @@ from workflow.config import (
     tavily_tool,
     vector_store,
     max_retriever_queries,
+    guardrail_client,
+    guardrail_identifier,
+    guardrail_version,
 )
 from workflow.schemas import (
     parser_for_retrieval_decider_node,
@@ -41,6 +46,77 @@ from workflow.prompts import (
     sys_prompt_for_direct_generation_node,
 )
 from langgraph.types import Send
+
+
+GUARDRAIL_BLOCKED_MESSAGE = (
+    "Sorry, we can't help with this request because it is not allowed by our guardrails."
+)
+GUARDRAIL_PROVIDER_BLOCK_MESSAGE = "Sorry, the model cannot answer this question."
+
+
+async def _apply_guardrail(text: str, source: str) -> dict:
+    """Run Bedrock Guardrails without blocking the async event loop."""
+    return await asyncio.to_thread(
+        guardrail_client.apply_guardrail,
+        guardrailIdentifier=guardrail_identifier,
+        guardrailVersion=guardrail_version,
+        source=source,
+        content=[{"text": {"text": text}}],
+    )
+
+
+async def input_guardrail_node(state: schema):
+    result = await _apply_guardrail(state["user_query"], "INPUT")
+    intervened = result.get("action") == "GUARDRAIL_INTERVENED"
+    outputs = result.get("outputs") or []
+    modified_text = outputs[0].get("text") if outputs else None
+    blocked = intervened and (
+        modified_text == GUARDRAIL_PROVIDER_BLOCK_MESSAGE or not modified_text
+    )
+    if blocked:
+        return {
+            "message": GUARDRAIL_BLOCKED_MESSAGE,
+            "generated_response": GUARDRAIL_BLOCKED_MESSAGE,
+            "input_guardrail_intervened": True,
+            "input_guardrail_blocked": True,
+        }
+    if intervened:
+        return {
+            "user_query": modified_text,
+            "input_guardrail_intervened": True,
+            "input_guardrail_blocked": False,
+        }
+    return {
+        "input_guardrail_intervened": False,
+        "input_guardrail_blocked": False,
+    }
+
+
+async def output_guardrail_node(state: schema):
+    result = await _apply_guardrail(state["generated_response"], "OUTPUT")
+    intervened = result.get("action") == "GUARDRAIL_INTERVENED"
+    outputs = result.get("outputs") or []
+    modified_text = outputs[0].get("text") if outputs else None
+    blocked = intervened and (
+        modified_text == GUARDRAIL_PROVIDER_BLOCK_MESSAGE or not modified_text
+    )
+    if blocked:
+        return {
+            "message": GUARDRAIL_BLOCKED_MESSAGE,
+            "generated_response": GUARDRAIL_BLOCKED_MESSAGE,
+            "output_guardrail_intervened": True,
+            "output_guardrail_blocked": True,
+        }
+    if intervened:
+        return {
+            "generated_response": modified_text,
+            "output_guardrail_intervened": True,
+            "output_guardrail_blocked": False,
+        }
+    return {
+        "output_guardrail_intervened": False,
+        "output_guardrail_blocked": False,
+    }
 
 
 def _extract_r1_text(content) -> str:

@@ -2,6 +2,7 @@
   <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white" />
   <img src="https://img.shields.io/badge/LangGraph-Agentic_Workflow-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white" />
   <img src="https://img.shields.io/badge/DeepSeek_R1_&_V3-AWS_Bedrock-FF9900?style=for-the-badge&logo=amazonwebservices&logoColor=white" />
+  <img src="https://img.shields.io/badge/Bedrock_Guardrails-Safety_Layer-DD344C?style=for-the-badge&logo=amazonwebservices&logoColor=white" />
   <img src="https://img.shields.io/badge/ChromaDB-Vector_Store-00AA6C?style=for-the-badge" />
   <img src="https://img.shields.io/badge/DeepEval-Evaluation-EF4444?style=for-the-badge" />
   <img src="https://img.shields.io/badge/MLflow-Experiment_Tracking-0194E2?style=for-the-badge&logo=mlflow&logoColor=white" />
@@ -13,7 +14,7 @@
 <h1 align="center">Self-RAG & Corrective RAG for the Indian Constitution & IPC</h1>
 
 <p align="center">
-  <em>An agentic, self-correcting Retrieval-Augmented Generation system that delivers reliable, grounded answers on Indian law — powered by LangGraph, DeepSeek R1/V3, and multi-stage validation.</em>
+  <em>An agentic, self-correcting Retrieval-Augmented Generation system that delivers reliable, grounded answers on Indian law — powered by LangGraph, DeepSeek R1/V3, multi-stage validation, and Amazon Bedrock Guardrails.</em>
 </p>
 
 ---
@@ -30,6 +31,7 @@ Unlike vanilla RAG, this system **self-evaluates and self-corrects** at every st
 - **Self-corrects** — rewrites or revises answers that fail grounding or relevance checks.
 - **Falls back to web search** — automatically searches the web when local retrieval fails.
 - **Maintains conversational memory** — rolling summarization preserves multi-turn context across sessions.
+- **Enforces guardrails** — blocks harmful, off-topic, and legally risky requests, and masks sensitive PII.
 
 ---
 
@@ -145,7 +147,7 @@ python evals/Component_level/1_generator.py
 
 ## Workflow Architecture
 
-The LangGraph state machine orchestrating the entire pipeline — **16 nodes** with parallel fan-out, self-correction loops, and conversational memory:
+The LangGraph state machine orchestrating the entire pipeline — **18 nodes** with parallel fan-out, self-correction loops, input/output guardrails, and conversational memory:
 
 ```mermaid
 ---
@@ -158,6 +160,7 @@ config:
 ---
 graph TD
     __start__([" __start__ "]):::startNode
+    input_guardrail_node["Input Guardrail"]:::guardrailNode
     retrieval_decider_node["Retrieval Decider"]:::routingNode
     generate_retriever_query_node["Generate Retriever Queries"]:::retrievalNode
     retrieve_node["Retrieve - Parallel"]:::retrievalNode
@@ -170,13 +173,17 @@ graph TD
     revise_answer_node["Revise Answer"]:::correctionNode
     is_answer_relevant_node["Answer Relevance Check"]:::validationNode
     rewrite_answer_node["Rewrite Answer"]:::correctionNode
+    output_guardrail_node["Output Guardrail"]:::guardrailNode
     generate_web_search_query_node["Generate Web Query"]:::webNode
     web_search_node["Web Search"]:::webNode
     memory_node["Memory Manager"]:::memoryNode
     modify_short_term_memory_node["Summarize Conversation"]:::memoryNode
     __end__([" __end__ "]):::endNode
 
-    __start__ --> retrieval_decider_node
+    __start__ --> input_guardrail_node
+
+    input_guardrail_node -. " allowed " .-> retrieval_decider_node
+    input_guardrail_node -. " blocked " .-> __end__
 
     retrieval_decider_node -. " retrieval " .-> generate_retriever_query_node
     retrieval_decider_node -. " web_search " .-> generate_web_search_query_node
@@ -199,11 +206,14 @@ graph TD
     check_answer_grounded_node -. " Not Grounded " .-> revise_answer_node
     revise_answer_node --> check_answer_grounded_node
 
-    is_answer_relevant_node -. " Relevant " .-> memory_node
+    is_answer_relevant_node -. " Relevant " .-> output_guardrail_node
     is_answer_relevant_node -. " Not Relevant " .-> rewrite_answer_node
     rewrite_answer_node --> is_answer_relevant_node
 
-    direct_generation_node --> memory_node
+    direct_generation_node --> output_guardrail_node
+
+    output_guardrail_node -. " allowed " .-> memory_node
+    output_guardrail_node -. " blocked " .-> __end__
 
     memory_node -. " summarize " .-> modify_short_term_memory_node
     memory_node -. " end " .-> __end__
@@ -217,6 +227,7 @@ graph TD
     classDef validationNode fill:#713f12,stroke:#fbbf24,stroke-width:2px,color:#fef3c7
     classDef correctionNode fill:#7f1d1d,stroke:#f87171,stroke-width:2px,color:#fee2e2
     classDef webNode fill:#164e63,stroke:#22d3ee,stroke-width:2px,color:#cffafe
+    classDef guardrailNode fill:#831843,stroke:#f472b6,stroke-width:2px,color:#fce7f3
     classDef memoryNode fill:#3b1f5e,stroke:#c084fc,stroke-width:2px,color:#ede9fe
 ```
 
@@ -231,29 +242,34 @@ graph TD
 | Yellow | Validation & Checks |
 | Red | Self-Correction |
 | Cyan | Web Search Fallback |
+| Rose | Input / Output Guardrails |
 | Violet | Conversational Memory |
 
 ---
 
 ## How It Works
 
-1. **Query Routing** — DeepSeek R1 classifies the user's question as requiring `retrieval` (vector DB), `web_search`, or `direct_generation` (greetings/chitchat).
+1. **Input Guardrail** — The Amazon Bedrock Guardrail screens the user's query before anything else runs. Blocked queries end immediately with the blocked message; allowed queries continue to routing.
 
-2. **Multi-Query Generation** — For retrieval queries, DeepSeek V3 generates up to 3 optimized sub-queries with optional metadata filters (`doc_type`, Article/Section numbers).
+2. **Query Routing** — DeepSeek R1 classifies the user's question as requiring `retrieval` (vector DB), `web_search`, or `direct_generation` (greetings/chitchat).
 
-3. **Parallel Retrieval** — Each sub-query triggers a parallel vector search via LangGraph's `Send` API (fan-out pattern) against the ChromaDB store.
+3. **Multi-Query Generation** — For retrieval queries, DeepSeek V3 generates up to 3 optimized sub-queries with optional metadata filters (`doc_type`, Article/Section numbers).
 
-4. **Parallel Relevance Scoring** — Every retrieved chunk is independently scored for relevance using DeepSeek V3 (Map step), then results are aggregated (Reduce step). Irrelevant chunks are discarded.
+4. **Parallel Retrieval** — Each sub-query triggers a parallel vector search via LangGraph's `Send` API (fan-out pattern) against the ChromaDB store.
 
-5. **Web Search Fallback** — If no relevant context survives filtering, DeepSeek V3 generates web search queries and fetches results from Tavily asynchronously.
+5. **Parallel Relevance Scoring** — Every retrieved chunk is independently scored for relevance using DeepSeek V3 (Map step), then results are aggregated (Reduce step). Irrelevant chunks are discarded.
 
-6. **Answer Generation** — DeepSeek R1 synthesizes an answer from the validated context, leveraging chain-of-thought reasoning with conversation summary and history.
+6. **Web Search Fallback** — If no relevant context survives filtering, DeepSeek V3 generates web search queries and fetches results from Tavily asynchronously.
 
-7. **Grounding Verification** — DeepSeek V3 audits each claim in the answer against the source evidence. Ungrounded answers are revised by a DeepSeek R1 critic model. This loops until the answer is fully grounded or retries are exhausted.
+7. **Answer Generation** — DeepSeek R1 synthesizes an answer from the validated context, leveraging chain-of-thought reasoning with conversation summary and history.
 
-8. **Relevance Validation** — DeepSeek R1 as a judge assesses whether the answer actually addresses the user's question. Irrelevant answers are rewritten with explicit reference to the relevance gap.
+8. **Grounding Verification** — DeepSeek V3 audits each claim in the answer against the source evidence. Ungrounded answers are revised by a DeepSeek R1 critic model. This loops until the answer is fully grounded or retries are exhausted.
 
-9. **Memory Management** — The validated answer is appended to conversation history. Every N turns, DeepSeek V3 generates a rolling summary of the conversation, enabling long multi-turn sessions without context overflow.
+9. **Relevance Validation** — DeepSeek R1 as a judge assesses whether the answer actually addresses the user's question. Irrelevant answers are rewritten with explicit reference to the relevance gap.
+
+10. **Output Guardrail** — The final answer (from the grounded-answer path or direct generation) is screened by the same guardrail. Blocked answers end the run; allowed answers move on to memory.
+
+11. **Memory Management** — The validated answer is appended to conversation history. Every N turns, DeepSeek V3 generates a rolling summary of the conversation, enabling long multi-turn sessions without context overflow.
 
 ---
 
@@ -267,12 +283,44 @@ graph TD
 | **Web Search Fallback** | Tavily Search API provides real-time web context when local retrieval finds no relevant results |
 | **Hallucination Guard** | Grounding checker verifies every answer against source evidence; ungrounded answers are revised by a critic model |
 | **Answer Relevance Loop** | A judge model evaluates if the final answer actually addresses the user's query; irrelevant answers are rewritten |
+| **Safety Guardrails** | Amazon Bedrock Guardrails block harmful content, prompt attacks, off-topic and legally risky requests, and mask phone, email, and card numbers on both input and output |
 | **Conversational Memory** | SQLite-backed state checkpointing with rolling summarization preserves multi-turn context across sessions |
 | **Observability** | Arize Phoenix integration provides full tracing of every LLM call, retrieval, and decision |
 | **Three-Tier Evaluation** | Component-level (retriever, generator) and pipeline-level evaluation using DeepEval with automated test set generation |
 | **Experiment Tracking** | MLflow on DagsHub tracks params, metrics, latencies, and artifacts across evaluation runs |
 | **Containerized Deployment** | Dockerized backend and frontend with Docker Compose orchestration |
 | **CI/CD Pipeline** | GitHub Actions workflow runs evaluations, builds images, pushes to AWS ECR, and deploys to EC2 |
+
+---
+
+## Guardrails
+
+An **Amazon Bedrock Guardrail** screens both user prompts and model responses, keeping the assistant on-topic and safe for a legal-information use case. It runs as dedicated graph nodes — `input_guardrail_node` before routing and `output_guardrail_node` before memory — and a blocked request or response ends the run immediately.
+
+| Policy | Configuration |
+|---|---|
+| **Content Filters** (Standard tier) | Hate, Insults, Misconduct — High strength, text + image, **Block** on prompts and responses |
+| **Prompt Attacks** | Enabled — High strength, **Block** |
+| **Denied Topics** | 6 topics, **Block** on input and output (listed below) |
+| **Profanity Filter** | Input: detect only · Output: **Block** |
+| **PII Masking** | `PHONE`, `EMAIL`, `CREDIT_DEBIT_CARD_NUMBER` — **Mask** on input and output |
+| **Blocked Messaging** | *"Sorry, the model cannot answer this question."* for blocked prompts and responses |
+
+**Denied topics**
+
+| Topic | What it blocks |
+|---|---|
+| **Off-Topic Requests** | Investing, medical advice, programming, math homework, travel, recipes, entertainment, sports, casual chit-chat |
+| **False Accusations** | Guidance on filing false complaints or fabricating allegations to harm or falsely implicate someone |
+| **Evidence Tampering** | Destroying, hiding, altering, or fabricating evidence; influencing or intimidating witnesses |
+| **Evading Law Enforcement** | Avoiding arrest, investigation, or prosecution; ignoring legal summons |
+| **Criminal Methods** | Step-by-step methods for fraud, forgery, theft, or violence without being detected |
+| **Case Outcome Guarantees** | Predictions or assurances about a specific person's verdict, bail, or sentence |
+
+> **Not enabled:** the Sexual and Violence content filters, Contextual Grounding / Relevance checks, and Automated Reasoning are disabled.
+>
+> - **Sexual & Violence filters** — intentionally left off. IPC sections describe violent and sexual offences by nature, so enabling these filters would block genuine legal queries and legitimate retrieved passages. Misuse is still limited by the High-strength Misconduct filter and the *Criminal Methods* denied topic.
+> - **Grounding / Relevance checks** — enforced inside the LangGraph workflow instead, by the **Grounding Check** and **Answer Relevance Check** nodes.
 
 ---
 
@@ -302,8 +350,9 @@ graph TD
 
 | Layer | Technology |
 |---|---|
-| **Orchestration** | [LangGraph](https://github.com/langchain-ai/langgraph) — agentic state machine with parallel fan-out (16 nodes) |
+| **Orchestration** | [LangGraph](https://github.com/langchain-ai/langgraph) — agentic state machine with parallel fan-out (18 nodes) |
 | **LLMs** | [DeepSeek R1](https://deepseek.com/) (reasoning/routing/judging) & [DeepSeek V3](https://deepseek.com/) (generation/grounding) via AWS Bedrock |
+| **Safety** | [Amazon Bedrock Guardrails](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails.html) — content filters, denied topics, prompt-attack detection, PII masking |
 | **Embeddings** | [Amazon Titan Embed Text v2](https://docs.aws.amazon.com/bedrock/latest/userguide/titan-embedding-models.html) (vector store) · [all-mpnet-base-v2](https://huggingface.co/sentence-transformers/all-mpnet-base-v2) (evaluation clustering) |
 | **Vector Store** | [ChromaDB](https://www.trychroma.com/) — persistent local vector database |
 | **Web Search** | [Tavily Search API](https://tavily.com/) — real-time web search fallback |
@@ -329,10 +378,10 @@ constitution_rag_eval/
 │   ├── cli.py                          # Interactive terminal interface (Rich-based)
 │   ├── create_vector_store.py          # Data ingestion → ChromaDB (Titan Embed v2)
 │   └── workflow/
-│       ├── __init__.py                 # Graph construction & compilation (16 nodes)
+│       ├── __init__.py                 # Graph construction & compilation (18 nodes)
 │       ├── state.py                    # TypedDict state schema with custom reducers
-│       ├── nodes.py                    # All node implementations (16 nodes)
-│       ├── edges.py                    # Conditional edge routing logic (5 conditions)
+│       ├── nodes.py                    # All node implementations (18 nodes)
+│       ├── edges.py                    # Conditional edge routing logic (7 conditions)
 │       ├── config.py                   # LLM clients, vector store, search tools
 │       ├── config.yaml                 # Model IDs, temperatures, embedding config
 │       ├── prompts.py                  # System prompts for every node
@@ -410,7 +459,7 @@ constitution_rag_eval/
 
 - **Python 3.12+**
 - [uv](https://github.com/astral-sh/uv) (recommended) or pip
-- API keys for: **AWS Bedrock** (DeepSeek models + Titan Embeddings), **Tavily Search**, **LangSmith** (optional)
+- API keys for: **AWS Bedrock** (DeepSeek models + Titan Embeddings + Guardrails), **Tavily Search**, **LangSmith** (optional)
 
 ### 1. Clone the Repository
 
@@ -543,6 +592,7 @@ The raw data was scraped, cleaned, and structured into JSON format via the [`dat
 
 - [LangChain](https://github.com/langchain-ai/langchain) & [LangGraph](https://github.com/langchain-ai/langgraph) for the agentic orchestration framework
 - [DeepSeek](https://deepseek.com/) for the R1 reasoning and V3 generation models
+- [Amazon Bedrock Guardrails](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails.html) for the safety and content-filtering layer
 - [DeepEval](https://docs.confident-ai.com/) for the evaluation framework
 - [Ragas](https://docs.ragas.io/) for knowledge graph and test set generation
 - [MLflow](https://mlflow.org/) & [DagsHub](https://dagshub.com/) for experiment tracking

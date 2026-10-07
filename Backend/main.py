@@ -9,15 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import yaml
 from langchain_core.messages import messages_to_dict
-
-sys.path.append(
-    os.path.abspath(
-        os.path.join(
-            os.path.dirname(__file__),
-            "..",
-        )
-    )
-)
 from src.workflow import get_workflow
 
 app = FastAPI()

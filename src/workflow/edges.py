@@ -5,6 +5,14 @@ def retrieval_decider_condition(state: schema):
     return state["retrieval_required"]
 
 
+def input_guardrail_condition(state: schema):
+    return "blocked" if state.get("input_guardrail_blocked") else "allowed"
+
+
+def output_guardrail_condition(state: schema):
+    return "blocked" if state.get("output_guardrail_blocked") else "allowed"
+
+
 def is_relevant_condition(state: schema):
     return len(state["relevant_contexts"]) > 0
 
